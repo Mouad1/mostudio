@@ -72,3 +72,11 @@ test("mergeThresholds appends every unmatched override in order", () => {
   const b: Threshold = { metric: "x", op: ">", value: 2, level: "warn" };
   assert.deepEqual(mergeThresholds([], [a, b]), [a, b]);
 });
+
+test("mergeThresholds tolerates null and non-object entries", () => {
+  const a: Threshold = { metric: "a", op: ">", value: 1, level: "fail" };
+  const bad = [null, 5, "x"] as unknown as Threshold[];
+  const merged = mergeThresholds([a, ...bad], [...bad, { ...a, value: 2 }]);
+  assert.equal(merged[0]?.value, 2);
+  assert.equal(evaluateGate({ a: 3 }, merged).status, "fail");
+});

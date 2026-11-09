@@ -92,6 +92,28 @@ function resolveParams(
   return out;
 }
 
+const OPS = new Set(["<", "<=", ">", ">=", "==", "between"]);
+
+/** Throw a clear error for anything that is not a well-formed list of thresholds. */
+function checkOverrides(overrides: unknown): Threshold[] {
+  if (overrides === undefined) return [];
+  if (!Array.isArray(overrides)) throw new Error("gateOverrides must be an array of thresholds");
+  overrides.forEach((t, i) => {
+    const o = t as Partial<Threshold> | null;
+    if (
+      typeof o !== "object" ||
+      o === null ||
+      typeof o.metric !== "string" ||
+      !OPS.has(String(o.op)) ||
+      (o.level !== "warn" && o.level !== "fail") ||
+      o.value === undefined
+    ) {
+      throw new Error(`gateOverrides[${i}] is not a valid threshold (needs metric, op, value, level)`);
+    }
+  });
+  return overrides as Threshold[];
+}
+
 /** Expand declared inputs to absolute file paths. Only a trailing `*` segment is supported. */
 async function expandInputs(projectDir: string, inputs: string[]): Promise<string[]> {
   const files: string[] = [];
@@ -191,7 +213,9 @@ export async function runStep(
 
   let params: Record<string, unknown>;
   let inputsHash: string;
+  let thresholds: Threshold[];
   try {
+    thresholds = mergeThresholds(contract.gate, checkOverrides(opts.gateOverrides));
     params = resolveParams(contract.params ?? {}, opts.params ?? {});
     // Project inputs are keyed relative to the project so moving the folder keeps the cache.
     const files: HashInput[] = (await expandInputs(projectDir, contract.inputs)).map((p) => ({
@@ -228,7 +252,7 @@ export async function runStep(
       (await outputsExist(projectDir, contract.outputs)).length === 0 &&
       (await Promise.all(prev.artifacts.map((a) => exists(resolve(projectDir, a))))).every(Boolean)
     ) {
-      const gate = evaluateGate(prev.metrics, mergeThresholds(contract.gate, opts.gateOverrides ?? []));
+      const gate = evaluateGate(prev.metrics, thresholds);
       if (gate.status !== "fail") {
         return { ...prev, status: gate.status, verdicts: gate.verdicts, cached: true };
       }
@@ -266,7 +290,7 @@ export async function runStep(
         error: message(new Error(`missing declared output: ${missing.join(", ")}`)),
       });
     } else {
-      const gate = evaluateGate(out.metrics, mergeThresholds(contract.gate, opts.gateOverrides ?? []));
+      const gate = evaluateGate(out.metrics, thresholds);
       final = result({
         status: gate.status,
         inputsHash,

@@ -9,6 +9,7 @@ import { latest, readLedger } from "./ledger.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import { runStep } from "./step.ts";
 import type { StepContract, StepModule } from "./step.ts";
+import type { Threshold } from "./types.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
 const providers = {} as ProviderRegistry;
@@ -496,4 +497,15 @@ test("ctx.env carries non-secret env values only", async () => {
   await runStep(dir, mod, { ...base(), env: { FFMPEG: "/opt/ffmpeg", GROQ_API_KEY: "sk-abcdef" } });
   assert.equal(seen.FFMPEG, "/opt/ffmpeg");
   assert.equal(seen.GROQ_API_KEY, undefined);
+});
+
+test("malformed gateOverrides are recorded as a fail, not thrown", async () => {
+  const { mod, calls } = makeFake();
+  for (const bad of [[null], "nope", [{ metric: "n" }]] as unknown as Threshold[][]) {
+    const r = await runStep(dir, mod, { ...base(), gateOverrides: bad });
+    assert.equal(r.status, "fail");
+    assert.match(r.error ?? "", /gateOverrides/);
+  }
+  assert.equal(calls.n, 0);
+  assert.equal(latest(await readLedger(dir), "fake")?.status, "fail");
 });

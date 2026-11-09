@@ -46,8 +46,12 @@ export function evaluateGate(
   return { status, verdicts };
 }
 
+const isObject = (t: unknown): t is Threshold => typeof t === "object" && t !== null && !Array.isArray(t);
+
+/** Overrides replace base entries with the same metric+level. Malformed entries never match and pass through for evaluateGate to report. */
 export function mergeThresholds(base: Threshold[], overrides: Threshold[]): Threshold[] {
-  const same = (a: Threshold, b: Threshold) => a.metric === b.metric && a.level === b.level;
+  const same = (a: Threshold, b: Threshold) =>
+    isObject(a) && isObject(b) && a.metric === b.metric && a.level === b.level;
   const used = new Set<Threshold>();
   const merged = base.map((b) => {
     const o = overrides.find((x) => same(x, b));
