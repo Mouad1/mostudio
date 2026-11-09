@@ -43,12 +43,12 @@ The portrait size comes from the scene itself: `<meta viewport width=1080,height
 
 | Metric | Value |
 | --- | --- |
-| Render time, 5 s scene, `--quality looks` | about 12.4 to 12.8 s (draft: 9.1 s) |
+| Render time, 5 s scene, `--quality looks` | 9.8 s (draft: 8.3 s); earlier runs of the spike varied 9 to 13 s, so treat it as roughly 10 s |
 | Final size / fps / duration | 1080x1920 / 30.000 / 15.000 s |
 | Integrated loudness (ebur128) | -14.0 LUFS |
 | A/V start offset | -21.3 ms (audio packet pts is -21.3 ms; AAC encoder priming, 1024 samples at 48 kHz; inside the 40 ms budget) |
 
-A cold render has fixed cost (Chrome launch, compile, setup about 3 s), so per-scene overhead dominates short clips: batch scenes or render long compositions rather than many tiny ones.
+Numbers are from the committed `report.md` run (HyperFrames version recorded there). A cold render has fixed cost (Chrome launch, compile, setup about 3 s), so per-scene overhead dominates short clips: batch scenes or render long compositions rather than many tiny ones.
 
 ## Alpha / transparent clips: yes
 
@@ -62,7 +62,7 @@ A cold render has fixed cost (Chrome launch, compile, setup about 3 s), so per-s
 
 1. Default Homebrew `ffmpeg` (9.0.2) has no libass: no `ass` or `subtitles` filter. `ffmpeg-full` is installed at `/opt/homebrew/opt/ffmpeg-full/bin/` and has them. `run.ts` prefers that path, overridable with `FFMPEG`/`FFPROBE` env vars. Plan 3 must probe for the `ass` filter (`ffmpeg -filters`) and fail with a clear fix message.
 2. `hyperframes lint` warns on nested elements inside a timeline element (`nested_structure_needs_subcomposition`); flat sibling elements avoid it.
-3. GSAP is loaded from jsDelivr (`gsap@3.15.0`) by the scene: renders need network or a vendored copy.
+3. GSAP is loaded from jsDelivr (`gsap@3.15.0`) by the scene: renders need network or a vendored copy. GSAP has its own license (not MIT, with usage terms); review it before vendoring a copy in Plan 3.
 4. `render` needs Chrome; it was already present (`~/.cache/hyperframes/chrome`), no browser download was needed in the spike.
 
 ## Fallback if headless render fails
