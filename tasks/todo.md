@@ -21,6 +21,7 @@
 - [x] Challenger pass 1 (builder check + red-team).
 - [x] Fold findings, user questions (3 answered).
 - [x] User approves spec (2026-11-09).
+- [x] Plan 1 written: docs/superpowers/plans/2026-11-09-plan-1-foundation.md (awaiting approval)
 - [ ] Establish required foundations.
 - [ ] Complete dependent work within agreed scope.
 - [ ] Verify applicable gates and record evidence.
