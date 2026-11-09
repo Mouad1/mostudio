@@ -467,3 +467,20 @@ test("secrets are redacted from ctx.log and string metrics", async () => {
   assert.equal(r.metrics.url, "https://x/?k=[redacted]");
   assert.ok(!JSON.stringify(await readLedger(dir)).includes(secret));
 });
+
+test("last picked provider is recorded when the step throws", async () => {
+  const reg = {
+    pick: async () => ({ id: "p", model: "m1", envValues: {} }),
+    recordUse: async () => {},
+    markExhausted: async () => {},
+  } as unknown as ProviderRegistry;
+  const { mod } = makeFake();
+  mod.run = async (ctx) => {
+    await ctx.providers.pick("llm");
+    throw new Error("429");
+  };
+  const r = await runStep(dir, mod, { config, providers: reg, log: silent });
+  assert.equal(r.status, "fail");
+  assert.deepEqual(r.provider, { id: "p", model: "m1" });
+  assert.deepEqual(latest(await readLedger(dir), "fake")?.provider, { id: "p", model: "m1" });
+});

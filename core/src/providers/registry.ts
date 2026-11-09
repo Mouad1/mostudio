@@ -22,11 +22,28 @@ export type ProviderEntry = {
   priority: Record<string, number>;
   /** Billed provider; skipped when billing is "free-only". */
   paid?: boolean;
+  /** Logical name -> name of a non-secret env var (e.g. accountId -> CLOUDFLARE_ACCOUNT_ID). */
+  env?: Record<string, string>;
+};
+
+/** A selected provider: its key (if any) and its `env` mapping resolved to values. */
+export type PickedProvider = ProviderEntry & {
+  key?: Secret;
+  envValues: Record<string, string | undefined>;
+};
+
+export type PickOptions = {
+  private?: boolean;
+  now?: Date;
+  /** Try this provider id first when it is eligible. */
+  prefer?: string;
+  /** Skip these provider ids (reason "excluded"). */
+  exclude?: string[];
 };
 
 export type Reason = {
   id: string;
-  reason: "no-key" | "exhausted" | "excluded-flag" | "rate-limited";
+  reason: "no-key" | "exhausted" | "excluded-flag" | "excluded" | "rate-limited";
   until?: string;
 };
 
@@ -43,17 +60,14 @@ export class NoProviderError extends Error {
 }
 
 export type ProviderRegistry = {
-  pick(
-    capability: string,
-    opts?: { private?: boolean; now?: Date },
-  ): Promise<ProviderEntry & { key?: Secret }>;
+  pick(capability: string, opts?: PickOptions): Promise<PickedProvider>;
   recordUse(id: string, now?: Date): Promise<void>;
   markExhausted(id: string, now?: Date): Promise<void>;
 };
 
 export function createRegistry(
   entries: ProviderEntry[],
-  env: Record<string, string>,
+  env: Record<string, string | undefined>,
   quotaStorePath: string,
   billing: Config["billing"],
 ): ProviderRegistry {
@@ -78,8 +92,14 @@ export function createRegistry(
         const candidates = entries
           .filter((e) => e.capabilities.includes(capability as Capability))
           .sort((a, b) => (a.priority[capability] ?? Infinity) - (b.priority[capability] ?? Infinity));
+        const preferred = candidates.findIndex((e) => e.id === opts.prefer);
+        if (preferred > 0) candidates.unshift(...candidates.splice(preferred, 1));
         const reasons: Reason[] = [];
         for (const e of candidates) {
+          if (opts.exclude?.includes(e.id)) {
+            reasons.push({ id: e.id, reason: "excluded" });
+            continue;
+          }
           if (
             !e.flags.commercial_ok ||
             (opts.private && e.flags.trains_on_data) ||
@@ -111,9 +131,10 @@ export function createRegistry(
             reasons.push(r);
             continue;
           }
-          const picked: ProviderEntry & { key?: Secret } = {
+          const picked: PickedProvider = {
             ...e,
             model: e.models?.[capability as Capability] ?? e.model,
+            envValues: Object.fromEntries(Object.entries(e.env ?? {}).map(([k, name]) => [k, env[name] || undefined])),
           };
           if (key) picked.key = key;
           return picked;

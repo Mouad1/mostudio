@@ -143,6 +143,7 @@ export async function runStep(
   const { contract } = mod;
   let startedAt = new Date();
   const redactor = createRedactor([process.env, opts.env]);
+  let lastPicked: { id: string; model: string } | undefined;
   const message = (err: unknown): string =>
     redactor.redact(err instanceof Error ? err.message : String(err));
   const cleanMetrics = (m: Metrics): Metrics =>
@@ -161,12 +162,15 @@ export async function runStep(
         private: Boolean(o?.private || contract.private),
       });
       if (entry.key) redactor.add(entry.key.reveal());
+      lastPicked = { id: entry.id, model: entry.model };
       return entry;
     },
     recordUse: (...a: Parameters<ProviderRegistry["recordUse"]>) => opts.providers.recordUse(...a),
     markExhausted: (...a: Parameters<ProviderRegistry["markExhausted"]>) =>
       opts.providers.markExhausted(...a),
   };
+  const withProvider = (p: { id: string; model: string } | undefined) =>
+    p ? { provider: { id: p.id, model: p.model } } : {};
   const result = (
     partial: Pick<StepResult, "status" | "inputsHash"> & Partial<StepResult>,
   ): StepResult => {
@@ -255,6 +259,7 @@ export async function runStep(
         inputsHash,
         metrics: out.metrics,
         artifacts: out.artifacts,
+        ...withProvider(out.provider ?? lastPicked),
         error: message(new Error(`missing declared output: ${missing.join(", ")}`)),
       });
     } else {
@@ -265,7 +270,7 @@ export async function runStep(
         metrics: out.metrics,
         verdicts: gate.verdicts,
         artifacts: out.artifacts,
-        ...(out.provider ? { provider: out.provider } : {}),
+        ...withProvider(out.provider ?? lastPicked),
         ...(out.quota ? { quota: out.quota } : {}),
       });
     }
@@ -273,6 +278,7 @@ export async function runStep(
     final = result({
       status: "fail",
       inputsHash,
+      ...withProvider(lastPicked),
       error: message(err),
     });
   }

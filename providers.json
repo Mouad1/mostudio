@@ -19,6 +19,7 @@
     "model": "@cf/openai/whisper-large-v3-turbo",
     "models": { "stt": "@cf/openai/whisper-large-v3-turbo", "image": "@cf/black-forest-labs/flux-1-schnell" },
     "keyEnv": "CLOUDFLARE_API_TOKEN",
+    "env": { "accountId": "CLOUDFLARE_ACCOUNT_ID" },
     "limits": {},
     "reset": { "tz": "UTC" },
     "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },

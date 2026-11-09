@@ -236,3 +236,45 @@ test("rpm 0 and rpd 0 mean no capacity without throwing RangeError", async () =>
     return true;
   });
 });
+
+test("prefer tries the named provider first when eligible", async () => {
+  const reg = createRegistry(
+    [entry("a", { priority: { stt: 1 } }), entry("b", { priority: { stt: 2 } })],
+    env,
+    store(),
+    "free-only",
+  );
+  assert.equal((await reg.pick("stt", { now: t0, prefer: "b" })).id, "b");
+  const noB = createRegistry([entry("a"), entry("b", { keyEnv: "MISSING_KEY" })], env, store(), "free-only");
+  assert.equal((await noB.pick("stt", { now: t0, prefer: "b" })).id, "a");
+  assert.equal((await reg.pick("stt", { now: t0, prefer: "zzz" })).id, "a");
+});
+
+test("exclude skips providers with reason excluded", async () => {
+  const reg = createRegistry([entry("a"), entry("b", { priority: { stt: 2 } })], env, store(), "free-only");
+  assert.equal((await reg.pick("stt", { now: t0, exclude: ["a"] })).id, "b");
+  await assert.rejects(reg.pick("stt", { now: t0, exclude: ["a", "b"] }), (e: NoProviderError) => {
+    assert.deepEqual(e.reasons.map((r) => [r.id, r.reason]), [["a", "excluded"], ["b", "excluded"]]);
+    return true;
+  });
+});
+
+test("entry env maps logical names to resolved non-secret values", async () => {
+  const reg = createRegistry(
+    [entry("a", { env: { accountId: "A_ACCOUNT_ID", region: "A_REGION" } })],
+    { ...env, A_ACCOUNT_ID: "acct-1" },
+    store(),
+    "free-only",
+  );
+  const p = await reg.pick("stt", { now: t0 });
+  assert.deepEqual(p.envValues, { accountId: "acct-1", region: undefined });
+  const plain = createRegistry([entry("b")], env, store(), "free-only");
+  assert.deepEqual((await plain.pick("stt", { now: t0 })).envValues, {});
+});
+
+test("seed cloudflare entry maps CLOUDFLARE_ACCOUNT_ID", () => {
+  const seeds = JSON.parse(readFileSync(new URL("../../../providers.json", import.meta.url), "utf8")) as ProviderEntry[];
+  assert.equal(seeds.find((e) => e.id === "cloudflare")?.env?.accountId, "CLOUDFLARE_ACCOUNT_ID");
+  const example = readFileSync(new URL("../../../.env.example", import.meta.url), "utf8");
+  assert.match(example, /^CLOUDFLARE_ACCOUNT_ID=/m);
+});
