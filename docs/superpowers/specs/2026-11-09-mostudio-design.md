@@ -192,7 +192,7 @@ Rotation across free-tier providers (source: user's "Free AI API Keys, Oct 2026"
 - Each provider entry has flags: `commercial_ok`, `trains_on_data`, `renewable`. Steps declare `private: true` when inputs are private media; the router then skips providers with `trains_on_data`.
 - One account per provider; no multiplying accounts to stretch quotas (against providers' terms).
 - Long audio is chunked to fit provider file limits before STT.
-- Limits are config values (`providers.yaml`), not code; checked against each limits page when a 429 pattern changes.
+- Limits are config values (`providers.json`), not code; checked against each limits page when a 429 pattern changes.
 
 Keys live in `.env.local`. Final STT choice for Darija comes from spike S1.
 

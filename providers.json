@@ -1,0 +1,121 @@
+[
+  {
+    "id": "groq",
+    "capabilities": ["stt", "llm"],
+    "kind": "openai-compat",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "model": "llama-3.3-70b-versatile",
+    "models": { "stt": "whisper-large-v3", "llm": "llama-3.3-70b-versatile" },
+    "keyEnv": "GROQ_API_KEY",
+    "limits": { "rpm": 20, "rpd": 2000 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "stt": 1, "llm": 2 }
+  },
+  {
+    "id": "cloudflare",
+    "capabilities": ["stt", "image"],
+    "kind": "native",
+    "model": "@cf/openai/whisper-large-v3-turbo",
+    "models": { "stt": "@cf/openai/whisper-large-v3-turbo", "image": "@cf/black-forest-labs/flux-1-schnell" },
+    "keyEnv": "CLOUDFLARE_API_TOKEN",
+    "limits": {},
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "stt": 2, "image": 2 }
+  },
+  {
+    "id": "whisper-cpp",
+    "capabilities": ["stt"],
+    "kind": "local",
+    "model": "large-v3",
+    "limits": {},
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "stt": 3 }
+  },
+  {
+    "id": "gemini",
+    "capabilities": ["llm", "vision", "tts", "image"],
+    "kind": "native",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "model": "gemini-2.5-flash",
+    "keyEnv": "GEMINI_API_KEY",
+    "limits": { "rpm": 10, "rpd": 250 },
+    "reset": { "tz": "America/Los_Angeles" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "llm": 1, "vision": 1, "tts": 1, "image": 1 }
+  },
+  {
+    "id": "zai",
+    "capabilities": ["llm", "vision"],
+    "kind": "openai-compat",
+    "baseUrl": "https://api.z.ai/api/paas/v4",
+    "model": "glm-4.5-flash",
+    "keyEnv": "ZAI_API_KEY",
+    "limits": {},
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "llm": 3, "vision": 2 }
+  },
+  {
+    "id": "openrouter",
+    "capabilities": ["llm"],
+    "kind": "openai-compat",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "model": "meta-llama/llama-3.3-70b-instruct:free",
+    "keyEnv": "OPENROUTER_API_KEY",
+    "limits": { "rpm": 20, "rpd": 50 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "llm": 4 }
+  },
+  {
+    "id": "nvidia",
+    "capabilities": ["llm"],
+    "kind": "openai-compat",
+    "baseUrl": "https://integrate.api.nvidia.com/v1",
+    "model": "meta/llama-3.3-70b-instruct",
+    "keyEnv": "NVIDIA_API_KEY",
+    "limits": { "rpm": 40 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": false },
+    "priority": { "llm": 99 }
+  },
+  {
+    "id": "mistral",
+    "capabilities": ["llm"],
+    "kind": "openai-compat",
+    "baseUrl": "https://api.mistral.ai/v1",
+    "model": "mistral-small-latest",
+    "keyEnv": "MISTRAL_API_KEY",
+    "limits": { "rpm": 2 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": true, "renewable": true },
+    "priority": { "llm": 5 }
+  },
+  {
+    "id": "pexels",
+    "capabilities": ["stock"],
+    "kind": "native",
+    "baseUrl": "https://api.pexels.com",
+    "model": "n/a",
+    "keyEnv": "PEXELS_API_KEY",
+    "limits": { "rpm": 200 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "stock": 1 }
+  },
+  {
+    "id": "pixabay",
+    "capabilities": ["stock"],
+    "kind": "native",
+    "baseUrl": "https://pixabay.com/api",
+    "model": "n/a",
+    "keyEnv": "PIXABAY_API_KEY",
+    "limits": { "rpm": 100 },
+    "reset": { "tz": "UTC" },
+    "flags": { "commercial_ok": true, "trains_on_data": false, "renewable": true },
+    "priority": { "stock": 2 }
+  }
+]
