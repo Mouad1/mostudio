@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { Config } from "./config.ts";
 import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
-import { latest, readLedger, recordStep } from "./ledger.ts";
+import { readLedger, recordStep } from "./ledger.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { Metrics, StepResult, Threshold } from "./types.ts";
 
@@ -215,7 +215,8 @@ export async function runStep(
   }
 
   if (!opts.force) {
-    const prev = latest(await readLedger(projectDir), contract.name);
+    // Validation failures carry no hash; they must not hide the last real run.
+    const prev = (await readLedger(projectDir)).steps[contract.name]?.findLast((r) => r.inputsHash !== "");
     if (
       prev &&
       prev.inputsHash === inputsHash &&

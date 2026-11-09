@@ -378,3 +378,14 @@ test("contract.private is enforced on every pick", async () => {
   await runStep(dir, mod, { config, providers: reg, log: silent });
   assert.deepEqual(seen.map((o) => o?.private), [true, true]);
 });
+
+test("a validation failure does not defeat the cache", async () => {
+  const { mod, calls } = makeFake({ params: { k: "number" } });
+  await runStep(dir, mod, { ...base(), params: { k: "1" } });
+  const bad = await runStep(dir, mod, { ...base(), params: { k: "nope" } });
+  assert.equal(bad.status, "fail");
+  assert.equal(bad.inputsHash, "");
+  const r = await runStep(dir, mod, { ...base(), params: { k: "1" } });
+  assert.equal(r.cached, true);
+  assert.equal(calls.n, 1);
+});
