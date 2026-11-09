@@ -107,7 +107,7 @@ flowchart TB
     I[ingest] --> T[transcribe] --> C[cut] --> CA[captions] --> M[mix] --> A[assemble] --> Q[qa]
     S[script] --> SB[storyboard] --> V[voice] --> AS[assets] --> SC[scenes] --> A
   end
-  WF[workflow runner<br/>rough-cut.yaml · concept-reel.yaml] --> steps
+  WF[workflow runner<br/>rough-cut.json · concept-reel.json] --> steps
   steps --> core
   Q --> L[learn → evolvebook]
 ```
@@ -125,7 +125,7 @@ flowchart TB
 | Isolation | a step runs alone: `mostudio step <name> --project <dir>`; idempotent, cached by input hash |
 | Language | process-level contract, so a step may be TypeScript or Python |
 
-**Workflow runner**: reads `workflows/<name>.yaml` (ordered steps, per-step params and gate overrides), runs steps in order, stops on `fail`, resumes from the last passed step, and pauses at human checkpoints (`approve: true` on a step). `mostudio status --project <dir>` prints every step's status and metrics.
+**Workflow runner**: reads `workflows/<name>.json` (ordered steps, per-step params and gate overrides), runs steps in order, stops on `fail`, resumes from the last passed step, and pauses at human checkpoints (`approve: true` on a step). `mostudio status --project <dir>` prints every step's status and metrics.
 
 ### 4.5 Repo layout
 
@@ -138,7 +138,7 @@ mostudio/                  # pnpm workspace (Node 22, TypeScript); Python allowe
     learn/                                                        # post-mortem → evolvebook
       each: contract.json · src/ · tests/ · fixtures/ · README.md (what it does, metrics, gate)
   providers/               # stt/ llm/ tts/ stock/ image/ — one adapter per service
-  workflows/               # rough-cut.yaml, concept-reel.yaml
+  workflows/               # rough-cut.json, concept-reel.json
   components/              # HyperFrames scene examples
   cli/                     # `mostudio` entry: new, run, step, status, export-skill
   skill/                   # evolvebook-format skill on top of the CLI
@@ -247,9 +247,9 @@ Built with moskills `modular-build`: one module at a time, each with its own run
 | 6 | mix | −14 ±1 LUFS on fixtures |
 | 7 | assemble | A/V offset < 40 ms |
 | 8 | qa | detects seeded black/silent openings |
-| 9 | workflow runner + `rough-cut.yaml` | real 10–20 min rush meets G2 |
+| 9 | workflow runner + `rough-cut.json` | real 10–20 min rush meets G2 |
 | 10 | script · 11 storyboard · 12 voice · 13 assets · 14 scenes | each module's gate passes on fixtures |
-| 15 | `concept-reel.yaml` | real reel meets G1 and G8 |
+| 15 | `concept-reel.json` | real reel meets G1 and G8 |
 | 16 | learn + skill | 3 real videos published, ≥ 1 rule promoted (G7) |
 
 v2 (after v1 is used for real): inspiration folder + `study` + `taste.md`, other recipes, Stageshow, OTIO export (edit decisions + SRT + graphics clips on their own track), public launch with demo videos and page on belghitis.com.
@@ -263,3 +263,5 @@ Internal module boundaries, CLI flag names, test framework, caption visual style
 ## 13. Review record
 
 Pass 1 (2026-11-09): builder check (7 questions) + red-team (12 findings). Later user decisions: free-tier API keys only (€0 default, quota fallback, §5b); fully modular step architecture with metrics and gates per step (§4.4, §5). User decided: v1 = reel + long rough cut; extract tubemauto under MIT; voice recorded or VoiceStudio if installed, visuals free stock. Builder's calls (user can override): hybrid render model (§4.1), drop Remotion, project folder and run.json (§4.3), CLI as portability layer (G3), quality rubric (G6), Darija spike before tools, IG/X/FB without cookies, clean-room in fresh session, asset license policy.
+
+Workflows are JSON, not YAML, to keep zero runtime dependencies (Node parses JSON natively).
