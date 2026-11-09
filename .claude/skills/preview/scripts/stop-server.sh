@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Stop the preview companion server
+# Usage: stop-server.sh <session_dir>
+#
+# Kills the server process. Only deletes generated preview-<pid>-<timestamp>
+# sessions directly under /tmp or its macOS /private/tmp alias.
+# Persistent .preview/ directories are kept, including projects under /tmp, so
+# mockups can be reviewed after the session ends.
+
+SESSION_DIR="$1"
+
+if [[ -z "$SESSION_DIR" ]]; then
+  echo '{"error": "Usage: stop-server.sh <session_dir>"}'
+  exit 1
+fi
+
+STATE_DIR="${SESSION_DIR}/state"
+PID_FILE="${STATE_DIR}/server.pid"
+
+if [[ -f "$PID_FILE" ]]; then
+  pid=$(cat "$PID_FILE")
+
+  kill "$pid" 2>/dev/null || true
+
+  for i in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+    sleep 0.1
+  fi
+
+  if kill -0 "$pid" 2>/dev/null; then
+    echo '{"status": "failed", "error": "process still running"}'
+    exit 1
+  fi
+
+  rm -f "$PID_FILE" "${STATE_DIR}/server.log"
+
+  session_parent=$(dirname -- "$SESSION_DIR")
+  session_name=$(basename -- "$SESSION_DIR")
+  if [[ "$session_parent" == /tmp || "$session_parent" == /private/tmp ]] &&
+     [[ "$session_name" =~ ^preview-[0-9]+-[0-9]+$ ]]; then
+    rm -rf "$SESSION_DIR"
+  fi
+
+  echo '{"status": "stopped"}'
+else
+  echo '{"status": "not_running"}'
+fi
