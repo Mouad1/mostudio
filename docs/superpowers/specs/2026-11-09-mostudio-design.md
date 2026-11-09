@@ -130,7 +130,7 @@ flowchart TB
 ### 4.5 Repo layout
 
 ```
-mostudio/                  # pnpm workspace (Node 22, TypeScript); Python allowed per step
+mostudio/                  # single root npm package (Node 22, TypeScript; modules are folders, since Node does not strip types inside node_modules); Python allowed per step
   core/                    # project folder, ledger, config, secrets, provider registry, quotas, gate engine
   steps/
     ingest/ transcribe/ cut/ captions/ mix/ assemble/ qa/          # rough-cut chain
