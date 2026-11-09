@@ -274,3 +274,20 @@ test("warn status prints the failed warn verdicts", async () => {
   assert.match(out(), /^fake-warn {2}warn /m);
   assert.match(out(), /^ {2}✗ a between 2\.\.4 \(actual 9\)$/m);
 });
+
+test("relative fileParams resolve against cwd", async () => {
+  const dir = await newProject("fileparam");
+  writeFileSync(join(cwd, "clip file.txt"), "x");
+  reset();
+  assert.equal(await run(["step", "fake-file", "--project", dir, "--param", "source=clip file.txt", "--json"]), 0);
+  assert.equal(JSON.parse(out()).metrics.source, join(cwd, "clip file.txt"));
+});
+
+test("inherited object keys are not step names", async () => {
+  const dir = await newProject("proto");
+  for (const name of ["toString", "constructor", "__proto__"]) {
+    reset();
+    assert.equal(await run(["step", name, "--project", dir]), 64, name);
+    assert.match(err(), /unknown step/);
+  }
+});

@@ -133,7 +133,7 @@ async function cmdStep(
 ): Promise<number> {
   const name = p.positional[1];
   if (!name || p.positional.length > 2) throw new UsageError("step needs exactly one <name>");
-  const mod = steps[name];
+  const mod = Object.hasOwn(steps, name) ? steps[name] : undefined;
   if (!mod) {
     io.stderr(`unknown step: ${name}\navailable steps: ${Object.keys(steps).sort().join(", ") || "(none)"}\n`);
     return 64;
@@ -143,8 +143,14 @@ async function cmdStep(
   const config = await loadConfig(rootOf(io), env);
   const entries = await loadProviders(rootOf(io));
   const providers = createRegistry(entries, env, join(config.home, "quota.json"), config.billing);
+  // File params are user paths: resolve them against the caller's cwd.
+  const params: Record<string, string> = { ...p.params };
+  for (const key of mod.contract.fileParams ?? []) {
+    const v = params[key];
+    if (v !== undefined && v !== "") params[key] = resolve(io.cwd, v);
+  }
   const result = await runStep(projectDir, mod, {
-    params: p.params,
+    params,
     force: p.force,
     config,
     providers,
