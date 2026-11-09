@@ -43,7 +43,7 @@ The portrait size comes from the scene itself: `<meta viewport width=1080,height
 
 | Metric | Value |
 | --- | --- |
-| Render time, 5 s scene, `--quality looks` | 9.8 s (draft: 8.3 s); earlier runs of the spike varied 9 to 13 s, so treat it as roughly 10 s |
+| Render time, 5 s scene, `--quality looks` | 13.0 s (draft: 8.3 s); other runs of the spike varied 9 to 13 s, so treat it as roughly 10 s |
 | Final size / fps / duration | 1080x1920 / 30.000 / 15.000 s |
 | Integrated loudness (ebur128) | -14.0 LUFS |
 | A/V start offset | -21.3 ms (measured; likely explained by standard AAC encoder priming of 1024 samples at 48 kHz = 21.3 ms, an explanation not a measurement; inside the 40 ms budget) |
