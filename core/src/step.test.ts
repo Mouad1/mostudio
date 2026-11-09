@@ -408,3 +408,46 @@ test("bumping contract version invalidates the cache", async () => {
   assert.equal((await runStep(dir, mod, base())).cached, false);
   assert.equal(calls.n, 2);
 });
+
+test("running marker exists during run and is removed after", async () => {
+  const { mod } = makeFake();
+  const inner = mod.run;
+  let during = false;
+  mod.run = async (ctx) => {
+    during = existsSync(join(ctx.projectDir, "steps", "fake.running"));
+    return inner(ctx);
+  };
+  await runStep(dir, mod, base());
+  assert.equal(during, true);
+  assert.equal(existsSync(join(dir, "steps", "fake.running")), false);
+  mod.run = async () => {
+    throw new Error("boom");
+  };
+  await runStep(dir, mod, { ...base(), force: true });
+  assert.equal(existsSync(join(dir, "steps", "fake.running")), false);
+});
+
+test("a leftover running marker (crash) forces a re-run", async () => {
+  const { mod, calls } = makeFake();
+  await runStep(dir, mod, base());
+  await writeFile(join(dir, "steps", "fake.running"), "{}");
+  const r = await runStep(dir, mod, base());
+  assert.equal(r.cached, false);
+  assert.equal(calls.n, 2);
+  assert.equal(existsSync(join(dir, "steps", "fake.running")), false);
+});
+
+test("a deleted artifact forces a re-run", async () => {
+  const { mod, calls } = makeFake();
+  const inner = mod.run;
+  mod.run = async (ctx) => {
+    const out = await inner(ctx);
+    await writeFile(join(ctx.projectDir, "renders", "side.txt"), "s");
+    return { ...out, artifacts: [...out.artifacts, "renders/side.txt"] };
+  };
+  await runStep(dir, mod, base());
+  assert.equal((await runStep(dir, mod, base())).cached, true);
+  await rm(join(dir, "renders", "side.txt"));
+  assert.equal((await runStep(dir, mod, base())).cached, false);
+  assert.equal(calls.n, 2);
+});

@@ -7,7 +7,7 @@ export type {
   Threshold,
   Verdict,
 } from "./types.ts";
-export { readJson, writeJsonAtomic } from "./fs/atomic.ts";
+export { readJson, writeJsonAtomic, writeOutputAtomic } from "./fs/atomic.ts";
 export { hashFiles } from "./hash.ts";
 export type { HashInput } from "./hash.ts";
 export { createProject } from "./project.ts";

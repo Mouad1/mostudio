@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { after, before, test } from "node:test";
-import { readJson, writeJsonAtomic } from "./atomic.ts";
+import { readJson, writeJsonAtomic, writeOutputAtomic } from "./atomic.ts";
 
 let dir: string;
 before(async () => {
@@ -45,4 +46,40 @@ test("readJson throws on invalid JSON", async () => {
   const p = join(dir, "bad.json");
   await writeFile(p, "{not json");
   await assert.rejects(readJson(p), SyntaxError);
+});
+
+test("writeOutputAtomic renames the tmp file into place on success", async () => {
+  const d = await mkdtemp(join(tmpdir(), "mostudio-out-"));
+  try {
+    const final = join(d, "out file.mp4");
+    let tmpSeen = "";
+    await writeOutputAtomic(final, async (tmp) => {
+      tmpSeen = tmp;
+      await writeFile(tmp, "video");
+    });
+    assert.equal(dirname(tmpSeen), d);
+    assert.equal(extname(tmpSeen), ".mp4");
+    assert.notEqual(tmpSeen, final);
+    assert.equal(readFileSync(final, "utf8"), "video");
+    assert.deepEqual(readdirSync(d), ["out file.mp4"]);
+  } finally {
+    await rm(d, { recursive: true, force: true });
+  }
+});
+
+test("writeOutputAtomic removes the tmp file and keeps no output on failure", async () => {
+  const d = await mkdtemp(join(tmpdir(), "mostudio-out-"));
+  try {
+    const final = join(d, "out.mp4");
+    await assert.rejects(
+      writeOutputAtomic(final, async (tmp) => {
+        await writeFile(tmp, "partial");
+        throw new Error("ffmpeg died");
+      }),
+      /ffmpeg died/,
+    );
+    assert.deepEqual(readdirSync(d), []);
+  } finally {
+    await rm(d, { recursive: true, force: true });
+  }
 });

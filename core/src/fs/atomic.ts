@@ -1,4 +1,5 @@
 import { open, readFile, rename, rm } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 
 export type AtomicDeps = {
   rename?: (from: string, to: string) => Promise<void>;
@@ -37,4 +38,23 @@ export async function readJson<T>(path: string): Promise<T | undefined> {
     throw err;
   }
   return JSON.parse(text) as T;
+}
+
+/**
+ * Produce a file (e.g. with ffmpeg) at a temp path beside `finalPath`, then rename it into place.
+ * The temp name keeps the extension so tools can infer the format. On failure the temp file is removed.
+ */
+export async function writeOutputAtomic(
+  finalPath: string,
+  produce: (tmpPath: string) => Promise<void>,
+): Promise<void> {
+  const ext = extname(finalPath);
+  const tmp = join(dirname(finalPath), `.${basename(finalPath, ext)}.${process.pid}.tmp${ext}`);
+  try {
+    await produce(tmp);
+    await rename(tmp, finalPath);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
 }

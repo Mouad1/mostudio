@@ -1,6 +1,7 @@
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Config } from "./config.ts";
+import { writeJsonAtomic } from "./fs/atomic.ts";
 import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
 import type { HashInput } from "./hash.ts";
@@ -146,6 +147,13 @@ async function outputsExist(projectDir: string, outputs: string[]): Promise<stri
   return missing;
 }
 
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 /** Validate, cache-check by input hash, run, gate, and record a single step. */
 export async function runStep(
   projectDir: string,
@@ -163,6 +171,8 @@ export async function runStep(
     await mkdir(join(projectDir, "steps"), { recursive: true });
     await recordStep(projectDir, r);
   };
+  // Present while mod.run is in flight; a leftover marker means the last run crashed.
+  const marker = join(projectDir, "steps", `${contract.name}.running`);
   const providers: ProviderRegistry = {
     ...opts.providers,
     pick: async (capability, o) => {
@@ -228,7 +238,9 @@ export async function runStep(
       prev &&
       prev.inputsHash === inputsHash &&
       (prev.status === "pass" || prev.status === "warn") &&
-      (await outputsExist(projectDir, contract.outputs)).length === 0
+      !(await exists(marker)) &&
+      (await outputsExist(projectDir, contract.outputs)).length === 0 &&
+      (await Promise.all(prev.artifacts.map((a) => exists(resolve(projectDir, a))))).every(Boolean)
     ) {
       const gate = evaluateGate(prev.metrics, mergeThresholds(contract.gate, opts.gateOverrides ?? []));
       if (gate.status !== "fail") {
@@ -246,6 +258,8 @@ export async function runStep(
   };
   let final: StepResult;
   try {
+    await mkdir(join(projectDir, "steps"), { recursive: true });
+    await writeJsonAtomic(marker, { pid: process.pid, startedAt: new Date().toISOString() });
     for (const out of contract.outputs) await rm(resolve(projectDir, out), { force: true });
     startedAt = new Date();
     const out = await mod.run(ctx);
@@ -278,5 +292,6 @@ export async function runStep(
     });
   }
   await record(final);
+  await rm(marker, { force: true });
   return { ...final, cached: false };
 }
