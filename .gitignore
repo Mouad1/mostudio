@@ -4,3 +4,4 @@ projects/
 **/cache/
 spikes/**/media/
 node_modules/
+.hyperframes/
