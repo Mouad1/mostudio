@@ -38,6 +38,9 @@ Add one row each time moskills changed an outcome (good or bad).
 | 2026-11-09 | delegation (bounded review) | pass 1: builder check + red-team found 19 issues; v1 cut from 6 phases to 2 spikes + 4 steps; 3 decisions sent to user | + | spec §13 |
 | 2026-11-09 | project seeds | CLAUDE.md constraints + todo filled in < 5 min; gave reviewers a clear frame | + (small) | CLAUDE.md, tasks/todo.md |
 
+| 2026-11-09 | modular-build + bounded review | Plan 1 built as 8 modules, each with own review; 13 Important defects caught per task (secret leak, cache gaps, crash safety) + 8 by final review before any Plan 2 code depended on them | + | .superpowers ledger, 28 commits |
+| 2026-11-09 | install (plugin path) | plugin's init command pointed at a stale worktree; main checkout used | − | baseline note |
+
 ## Costs to watch
 
 - Footprint: 89 files before any product code; skills duplicated in `.claude/` and `.agents/`.

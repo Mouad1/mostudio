@@ -22,6 +22,14 @@
 - [x] Fold findings, user questions (3 answered).
 - [x] User approves spec (2026-11-09).
 - [x] Plan 1 written: docs/superpowers/plans/2026-11-09-plan-1-foundation.md (awaiting approval)
+## Modules (Plan 1)
+- [x] module-scaffold: zero-dep TS workspace (03218a5..3b37e45)
+- [x] module-s2-render-spike: HyperFrames → ffmpeg proven, ADR 0002 proposed (awaiting user acceptance)
+- [x] module-core: types, ledger, gate, config/providers/quotas, step runner (94c5224..527a459 + final fixes)
+- [x] module-cli: new / step / status (bfbe154 + final fixes)
+- [x] module-ingest: probe + import with gate (4855227 + final fixes)
+- [ ] module-s1-stt-spike: blocked on user's 3 Darija clips + references + GROQ key in .env.local
+- [ ] User acceptance: ADR 0002, core, ingest on a real phone clip
 - [ ] Establish required foundations.
 - [ ] Complete dependent work within agreed scope.
 - [ ] Verify applicable gates and record evidence.
