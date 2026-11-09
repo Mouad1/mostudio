@@ -162,8 +162,11 @@ export async function runStep(
   };
   const providers: ProviderRegistry = {
     ...opts.providers,
-    pick: async (...args: Parameters<ProviderRegistry["pick"]>) => {
-      const entry = await opts.providers.pick(...args);
+    pick: async (capability, o) => {
+      const entry = await opts.providers.pick(capability, {
+        ...o,
+        private: Boolean(o?.private || contract.private),
+      });
       if (entry.key) picked.add(entry.key.reveal());
       return entry;
     },

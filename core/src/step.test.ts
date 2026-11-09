@@ -357,3 +357,24 @@ test("durationMs measures run time only", async () => {
   assert.ok(r.durationMs >= 25 && r.durationMs < 1000);
   assert.equal(r.startedAt <= r.endedAt, true);
 });
+
+test("contract.private is enforced on every pick", async () => {
+  const seen: Array<{ private?: boolean } | undefined> = [];
+  const reg = {
+    pick: async (_cap: string, o?: { private?: boolean }) => {
+      seen.push(o);
+      return { id: "p", model: "m" };
+    },
+    recordUse: async () => {},
+    markExhausted: async () => {},
+  } as unknown as ProviderRegistry;
+  const { mod } = makeFake({ private: true });
+  const inner = mod.run;
+  mod.run = async (ctx) => {
+    await ctx.providers.pick("llm");
+    await ctx.providers.pick("llm", { private: false });
+    return inner(ctx);
+  };
+  await runStep(dir, mod, { config, providers: reg, log: silent });
+  assert.deepEqual(seen.map((o) => o?.private), [true, true]);
+});
