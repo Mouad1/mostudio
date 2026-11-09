@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --ground: #0a0a0a;
+        --ink: #f5f5f5;
+        --accent: #6366f1;
+        --font-display: "Helvetica Neue", Arial, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 1080px; height: 1920px; background: var(--ground); font-family: var(--font-display); }
+      #title {
+        position: absolute; left: 90px; top: 760px; width: 900px;
+        color: var(--ink); font-size: 120px; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em;
+      }
+      #rule { position: absolute; left: 90px; top: 720px; width: 160px; height: 12px; background: var(--accent); }
+      #lower { position: absolute; left: 0; top: 1500px; width: 760px; height: 150px; background: var(--accent); }
+      #lname { position: absolute; left: 90px; top: 1520px; color: #fff; font-size: 52px; font-weight: 700; }
+      #lrole { position: absolute; left: 90px; top: 1590px; color: #e0e7ff; font-size: 34px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="5" data-width="1080" data-height="1920">
+      <div id="rule" class="clip" data-start="0" data-duration="5" data-track-index="0"></div>
+      <h1 id="title" class="clip" data-start="0" data-duration="5" data-track-index="1">Scene to clip to final cut</h1>
+      <div id="lower" class="clip" data-start="1.5" data-duration="3.5" data-track-index="2"></div>
+      <div id="lname" class="clip" data-start="1.5" data-duration="3.5" data-track-index="3">mostudio</div>
+      <div id="lrole" class="clip" data-start="1.5" data-duration="3.5" data-track-index="4">HyperFrames spike</div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#title", { x: -300, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0);
+      tl.fromTo("#rule", { scaleX: 0, transformOrigin: "left center" }, { scaleX: 1, duration: 0.4, ease: "power3.out" }, 0);
+      tl.fromTo(["#lower", "#lname", "#lrole"], { x: -760 }, { x: 0, duration: 0.5, ease: "power3.out" }, 1.5);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
