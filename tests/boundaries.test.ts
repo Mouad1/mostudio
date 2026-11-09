@@ -28,6 +28,7 @@ export function findViolations(root: string): string[] {
   const coreIndex = join(coreDir, "src", "index.ts");
   const violations: string[] = [];
   for (const file of tsFiles(stepsDir)) {
+    if (!relative(stepsDir, file).includes(sep)) continue; // steps/index.ts is the registry: it imports each step
     const own = relative(stepsDir, file).split(sep)[0];
     for (const spec of importSpecifiers(readFileSync(file, "utf8"))) {
       if (!spec.startsWith(".")) continue;

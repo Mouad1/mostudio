@@ -1,0 +1,11 @@
+{
+  "name": "ingest",
+  "inputs": [],
+  "outputs": ["media/ingest.json"],
+  "params": { "source": "string" },
+  "fileParams": ["source"],
+  "gate": [
+    { "metric": "hasAudio", "op": "==", "value": true, "level": "fail" },
+    { "metric": "durationSec", "op": ">", "value": 0, "level": "fail" }
+  ]
+}
