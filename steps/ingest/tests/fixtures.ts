@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { runBin } from "../src/probe.ts";
+import { resolveBin, runBin } from "../../../core/src/index.ts";
 
 export type ClipOptions = { seconds: number; width: number; height: number; audio: boolean; rotation?: 90; name?: string };
 
 /** Generate a synthetic clip with ffmpeg (lavfi testsrc2 + sine). */
 export async function makeClip(dir: string, o: ClipOptions): Promise<string> {
-  const ffmpeg = process.env.FFMPEG ?? "ffmpeg";
+  const ffmpeg = resolveBin("ffmpeg", process.env);
   const out = join(dir, o.name ?? "clip.mp4");
   const plain = o.rotation ? join(dir, `.plain-${o.name ?? "clip.mp4"}`) : out;
   const args = ["-y", "-v", "error", "-f", "lavfi", "-i", `testsrc2=size=${o.width}x${o.height}:rate=30:duration=${o.seconds}`];

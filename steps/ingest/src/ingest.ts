@@ -27,7 +27,7 @@ export const ingest: StepModule = {
     const dest = join(ctx.projectDir, rel);
     await copyFile(source, dest);
     ctx.log(`copied ${name} into media/`);
-    const info = await probe(dest);
+    const info = await probe(dest, ctx.env);
     const hash = await sha256(dest);
     const size = (await stat(dest)).size;
     await writeJsonAtomic(join(ctx.projectDir, "media", "ingest.json"), { file: rel, ...info, sha256: hash });

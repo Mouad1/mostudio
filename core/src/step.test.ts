@@ -484,3 +484,16 @@ test("last picked provider is recorded when the step throws", async () => {
   assert.deepEqual(r.provider, { id: "p", model: "m1" });
   assert.deepEqual(latest(await readLedger(dir), "fake")?.provider, { id: "p", model: "m1" });
 });
+
+test("ctx.env carries non-secret env values only", async () => {
+  let seen: Record<string, string | undefined> = {};
+  const { mod } = makeFake();
+  const inner = mod.run;
+  mod.run = async (ctx) => {
+    seen = ctx.env;
+    return inner(ctx);
+  };
+  await runStep(dir, mod, { ...base(), env: { FFMPEG: "/opt/ffmpeg", GROQ_API_KEY: "sk-abcdef" } });
+  assert.equal(seen.FFMPEG, "/opt/ffmpeg");
+  assert.equal(seen.GROQ_API_KEY, undefined);
+});

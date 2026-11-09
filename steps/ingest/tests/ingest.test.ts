@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
-import { runStep } from "../../../core/src/index.ts";
+import { resolveBin, runBin, runStep } from "../../../core/src/index.ts";
 import { ingest } from "../src/ingest.ts";
 import { probe } from "../src/probe.ts";
 import { makeClip } from "./fixtures.ts";
@@ -91,9 +91,8 @@ test("source file is copied, original untouched", async () => {
 
 test("probe parses fractional fps and audio-only files", async () => {
   const f = join(tmp, "src", "a.m4a");
-  const { runBin } = await import("../src/probe.ts");
-  await runBin(process.env.FFMPEG ?? "ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", f]);
-  const p = await probe(f);
+  await runBin(resolveBin("ffmpeg", process.env), ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", f]);
+  const p = await probe(f, process.env);
   assert.equal(p.hasAudio, true);
   assert.equal(p.width, 0);
   assert.equal(p.fps, 0);
@@ -101,12 +100,15 @@ test("probe parses fractional fps and audio-only files", async () => {
 });
 
 test("missing binary gives a clear error", async () => {
-  const old = process.env.FFPROBE;
-  process.env.FFPROBE = "no-such-ffprobe";
-  try {
-    await assert.rejects(probe(clip), /no-such-ffprobe not found/);
-  } finally {
-    if (old === undefined) delete process.env.FFPROBE;
-    else process.env.FFPROBE = old;
-  }
+  await assert.rejects(probe(clip, { FFPROBE: "no-such-ffprobe" }), /no-such-ffprobe not found/);
+});
+
+test("ingest resolves ffprobe from ctx.env", async () => {
+  const r = await runStep(dir, ingest, { params: { source: clip }, ...base, env: { FFPROBE: "no-such-ffprobe" } });
+  assert.equal(r.status, "fail");
+  assert.match(r.error ?? "", /no-such-ffprobe not found/);
+});
+
+test("unparseable ffprobe output names the binary", async () => {
+  await assert.rejects(probe(clip, { FFPROBE: "/bin/echo" }), /\/bin\/echo returned invalid JSON/);
 });

@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
-
-const TIMEOUT_MS = 120_000;
+import { resolveBin, runBin } from "../../../core/src/index.ts";
 
 export type ProbeResult = {
   durationSec: number;
@@ -13,19 +11,6 @@ export type ProbeResult = {
   videoCodec: string;
   audioCodec?: string;
 };
-
-/** Run a binary without a shell; fail with a message naming the binary when missing or slow. */
-export function runBin(bin: string, args: string[], timeoutMs = TIMEOUT_MS): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, shell: false }, (err, stdout, stderr) => {
-      if (!err) return resolve(stdout);
-      const e = err as NodeJS.ErrnoException & { killed?: boolean };
-      if (e.code === "ENOENT") return reject(new Error(`${bin} not found; install ffmpeg or set the FFMPEG/FFPROBE env var`));
-      if (e.killed) return reject(new Error(`${bin} timed out after ${timeoutMs}ms`));
-      reject(new Error(`${bin} failed: ${String(stderr).trim().split("\n").slice(-3).join(" ") || e.message}`));
-    });
-  });
-}
 
 type Stream = {
   codec_type?: string;
@@ -57,11 +42,15 @@ function rotationOf(v: Stream): number {
   return deg % 360;
 }
 
-export async function probe(file: string): Promise<ProbeResult> {
-  const out = await runBin(process.env.FFPROBE ?? "ffprobe", [
-    "-v", "error", "-print_format", "json", "-show_streams", "-show_format", file,
-  ]);
-  const data = JSON.parse(out) as { streams?: Stream[]; format?: { duration?: string } };
+export async function probe(file: string, env: Record<string, string | undefined>): Promise<ProbeResult> {
+  const bin = resolveBin("ffprobe", env);
+  const out = await runBin(bin, ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", file]);
+  let data: { streams?: Stream[]; format?: { duration?: string } };
+  try {
+    data = JSON.parse(out) as typeof data;
+  } catch (err) {
+    throw new Error(`${bin} returned invalid JSON: ${(err as Error).message}`, { cause: err });
+  }
   const streams = data.streams ?? [];
   const video = streams.find((s) => s.codec_type === "video");
   const audio = streams.find((s) => s.codec_type === "audio");

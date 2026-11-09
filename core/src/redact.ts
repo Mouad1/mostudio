@@ -35,3 +35,8 @@ export function createRedactor(
     },
   };
 }
+
+/** Copy of `env` without secret-named variables (KEY/TOKEN/SECRET/PASSWORD). */
+export function publicEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !SECRET_NAME_RE.test(name)));
+}

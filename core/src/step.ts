@@ -6,7 +6,7 @@ import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
 import type { HashInput } from "./hash.ts";
 import { readLedger, recordStep } from "./ledger.ts";
-import { createRedactor } from "./redact.ts";
+import { createRedactor, publicEnv } from "./redact.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { Metrics, StepResult, Threshold } from "./types.ts";
 
@@ -30,6 +30,8 @@ export type StepContext = {
   config: Config;
   providers: ProviderRegistry;
   log: (msg: string) => void;
+  /** Non-secret environment (process env merged with .env.local); keys come only via providers.pick. */
+  env: Record<string, string | undefined>;
 };
 
 export type StepOutput = {
@@ -51,7 +53,7 @@ export type RunStepOptions = {
   config: Config;
   providers: ProviderRegistry;
   log?: (msg: string) => void;
-  /** Extra env map (e.g. loaded .env.local) scanned for secret values to redact. */
+  /** Merged env (process env + .env.local). Scanned for secrets to redact; its non-secret part becomes ctx.env. Defaults to process.env. */
   env?: Record<string, string | undefined>;
 };
 
@@ -238,6 +240,7 @@ export async function runStep(
     params,
     config: opts.config,
     providers,
+    env: publicEnv(opts.env ?? process.env),
     log: (msg) => {
       const clean = redactor.redact(msg);
       if (opts.log) opts.log(clean);
