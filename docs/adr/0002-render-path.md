@@ -32,7 +32,7 @@ npx hyperframes@0.9.26 render spikes/s2-render/scene --quality looks --fps 30 --
 npx hyperframes@0.9.26 render spikes/s2-render/scene --quality draft --fps 30 --format webm -o spikes/s2-render/media/scene-alpha.webm --quiet
 ```
 
-The portrait size comes from the scene itself: `<meta viewport width=1080,height=1920>` and the root's `data-width="1080" data-height="1920"` (`npx hyperframes init scene --resolution portrait` scaffolds this). Assembly (full argument lists in `report.md`):
+The portrait size comes from the scene itself: `<meta viewport width=1080,height=1920>` and the root's `data-width="1080" data-height="1920"` (`npx hyperframes@0.9.26 init scene --resolution portrait` scaffolds this). Assembly (full argument lists in `report.md`):
 
 - stand-in: `ffmpeg -f lavfi -i testsrc2=size=1080x1920:rate=30:duration=10 -c:v libx264 -pix_fmt yuv420p`
 - concat + captions: `[0:v]fps=30,format=yuv420p,setsar=1[a0];[2:v]fps=30,scale=1080:1920,format=yuv420p,setsar=1[a1];[a0][a1]concat=n=2:v=1:a=0[cat];[cat]ass=<file>.ass[v]`
@@ -43,12 +43,12 @@ The portrait size comes from the scene itself: `<meta viewport width=1080,height
 
 | Metric | Value |
 | --- | --- |
-| Render time, 5 s scene, `--quality looks` | 13.0 s (draft: 8.3 s); other runs of the spike varied 9 to 13 s, so treat it as roughly 10 s |
+| Render time, 5 s scene, `--quality looks` | 13.0 s (`--quality draft`: 8.3 s; draft alpha WebM: 10.9 s) |
 | Final size / fps / duration | 1080x1920 / 30.000 / 15.000 s |
 | Integrated loudness (ebur128) | -14.0 LUFS |
 | A/V start offset | -21.3 ms (measured; likely explained by standard AAC encoder priming of 1024 samples at 48 kHz = 21.3 ms, an explanation not a measurement; inside the 40 ms budget) |
 
-Numbers are from the committed `report.md` run (HyperFrames version recorded there). A render has fixed per-run cost (Chrome launch, compile, setup; a 5 s scene takes about as long as its draft/looks wall time above), so per-scene overhead likely dominates short clips: batch scenes or render long compositions rather than many tiny ones.
+Numbers are from the committed `report.md` run (HyperFrames version recorded there). A render has fixed per-run cost (Chrome launch, compile, setup), so per-scene overhead likely dominates short clips: batch scenes or render long compositions rather than many tiny ones.
 
 ## Alpha / transparent clips: yes
 
