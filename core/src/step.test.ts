@@ -451,3 +451,19 @@ test("a deleted artifact forces a re-run", async () => {
   assert.equal((await runStep(dir, mod, base())).cached, false);
   assert.equal(calls.n, 2);
 });
+
+test("secrets are redacted from ctx.log and string metrics", async () => {
+  const secret = "sk-log-secret-456";
+  const lines: string[] = [];
+  const { mod } = makeFake();
+  const inner = mod.run;
+  mod.run = async (ctx) => {
+    ctx.log(`calling with ${secret}`);
+    const out = await inner(ctx);
+    return { ...out, metrics: { ...out.metrics, url: `https://x/?k=${secret}` } };
+  };
+  const r = await runStep(dir, mod, { ...base(), log: (m) => lines.push(m), env: { X_TOKEN: secret } });
+  assert.deepEqual(lines, ["calling with [redacted]"]);
+  assert.equal(r.metrics.url, "https://x/?k=[redacted]");
+  assert.ok(!JSON.stringify(await readLedger(dir)).includes(secret));
+});

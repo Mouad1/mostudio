@@ -2,6 +2,7 @@ import { mkdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   createProject,
+  createRedactor,
   createRegistry,
   latest,
   loadConfig,
@@ -154,6 +155,7 @@ export async function main(
   io: Io,
   steps: Record<string, StepModule> = defaultSteps,
 ): Promise<number> {
+  let fileEnv: Record<string, string> = {};
   try {
     const p = parseArgs(argv);
     if (p.help) {
@@ -165,7 +167,7 @@ export async function main(
       io.stderr(command ? `unknown command: ${command}\n${USAGE}` : USAGE);
       return 64;
     }
-    const fileEnv = loadEnvFile(join(io.cwd, ".env.local"));
+    fileEnv = loadEnvFile(join(io.cwd, ".env.local"));
     const env = { ...fileEnv, ...io.env };
     if (command === "new") return await cmdNew(p, io, env);
     if (command === "step") return await cmdStep(p, io, env, steps);
@@ -175,7 +177,8 @@ export async function main(
       io.stderr(`${err.message}\n${USAGE}`);
       return 64;
     }
-    io.stderr(`error: ${err instanceof Error ? err.message : String(err)}\n`);
+    const redactor = createRedactor([process.env, fileEnv, io.env]);
+    io.stderr(`error: ${redactor.redact(err instanceof Error ? err.message : String(err))}\n`);
     return 1;
   }
 }

@@ -204,3 +204,11 @@ test("output never contains a secret value", async () => {
   await run(["status", "--project", dir, "--json"], { GROQ_API_KEY: secret });
   assert.ok(!out().includes(secret));
 });
+
+test("catch-all error message is redacted", async () => {
+  const secret = "sekret-path-777";
+  reset();
+  assert.equal(await run(["new", "redacted", "--brief", secret], { GROQ_API_KEY: secret }), 1);
+  assert.match(err(), /\[redacted\]/);
+  assert.ok(!err().includes(secret));
+});

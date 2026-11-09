@@ -6,6 +6,7 @@ import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
 import type { HashInput } from "./hash.ts";
 import { readLedger, recordStep } from "./ledger.ts";
+import { createRedactor } from "./redact.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { Metrics, StepResult, Threshold } from "./types.ts";
 
@@ -53,27 +54,6 @@ export type RunStepOptions = {
   /** Extra env map (e.g. loaded .env.local) scanned for secret values to redact. */
   env?: Record<string, string | undefined>;
 };
-
-const SECRET_NAME_RE = /KEY|TOKEN|SECRET|PASSWORD/i;
-const MIN_SECRET_LEN = 6;
-
-function redact(text: string, secrets: Iterable<string>): string {
-  let out = text;
-  for (const value of secrets) {
-    if (value.length >= MIN_SECRET_LEN) out = out.split(value).join("[redacted]");
-  }
-  return out;
-}
-
-function envSecrets(...envs: Array<Record<string, string | undefined> | undefined>): string[] {
-  const values: string[] = [];
-  for (const env of envs) {
-    for (const [name, value] of Object.entries(env ?? {})) {
-      if (value && SECRET_NAME_RE.test(name)) values.push(value);
-    }
-  }
-  return values;
-}
 
 async function isFile(path: string): Promise<boolean> {
   try {
@@ -162,11 +142,11 @@ export async function runStep(
 ): Promise<StepResult & { cached: boolean }> {
   const { contract } = mod;
   let startedAt = new Date();
-  const picked = new Set<string>();
-  const message = (err: unknown): string => {
-    const raw = err instanceof Error ? err.message : String(err);
-    return redact(raw, [...envSecrets(process.env, opts.env), ...picked]);
-  };
+  const redactor = createRedactor([process.env, opts.env]);
+  const message = (err: unknown): string =>
+    redactor.redact(err instanceof Error ? err.message : String(err));
+  const cleanMetrics = (m: Metrics): Metrics =>
+    Object.fromEntries(Object.entries(m).map(([k, v]) => [k, typeof v === "string" ? redactor.redact(v) : v]));
   const record = async (r: StepResult): Promise<void> => {
     await mkdir(join(projectDir, "steps"), { recursive: true });
     await recordStep(projectDir, r);
@@ -180,7 +160,7 @@ export async function runStep(
         ...o,
         private: Boolean(o?.private || contract.private),
       });
-      if (entry.key) picked.add(entry.key.reveal());
+      if (entry.key) redactor.add(entry.key.reveal());
       return entry;
     },
     recordUse: (...a: Parameters<ProviderRegistry["recordUse"]>) => opts.providers.recordUse(...a),
@@ -254,7 +234,11 @@ export async function runStep(
     params,
     config: opts.config,
     providers,
-    log: opts.log ?? ((msg) => void process.stderr.write(`[${contract.name}] ${msg}\n`)),
+    log: (msg) => {
+      const clean = redactor.redact(msg);
+      if (opts.log) opts.log(clean);
+      else process.stderr.write(`[${contract.name}] ${clean}\n`);
+    },
   };
   let final: StepResult;
   try {
@@ -262,7 +246,8 @@ export async function runStep(
     await writeJsonAtomic(marker, { pid: process.pid, startedAt: new Date().toISOString() });
     for (const out of contract.outputs) await rm(resolve(projectDir, out), { force: true });
     startedAt = new Date();
-    const out = await mod.run(ctx);
+    const raw = await mod.run(ctx);
+    const out = { ...raw, metrics: cleanMetrics(raw.metrics ?? {}) };
     const missing = await outputsExist(projectDir, contract.outputs);
     if (missing.length) {
       final = result({
