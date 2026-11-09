@@ -12,3 +12,4 @@ export { hashFiles } from "./hash.ts";
 export { createProject } from "./project.ts";
 export { latest, readLedger, recordStep } from "./ledger.ts";
 export type { Ledger } from "./ledger.ts";
+export { evaluateGate, mergeThresholds } from "./gate.ts";
