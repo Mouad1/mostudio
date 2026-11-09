@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Config } from "./config.ts";
 import { evaluateGate, mergeThresholds } from "./gate.ts";
@@ -46,7 +46,30 @@ export type RunStepOptions = {
   config: Config;
   providers: ProviderRegistry;
   log?: (msg: string) => void;
+  /** Extra env map (e.g. loaded .env.local) scanned for secret values to redact. */
+  env?: Record<string, string | undefined>;
 };
+
+const SECRET_NAME_RE = /KEY|TOKEN|SECRET|PASSWORD/i;
+const MIN_SECRET_LEN = 6;
+
+function redact(text: string, secrets: Iterable<string>): string {
+  let out = text;
+  for (const value of secrets) {
+    if (value.length >= MIN_SECRET_LEN) out = out.split(value).join("[redacted]");
+  }
+  return out;
+}
+
+function envSecrets(...envs: Array<Record<string, string | undefined> | undefined>): string[] {
+  const values: string[] = [];
+  for (const env of envs) {
+    for (const [name, value] of Object.entries(env ?? {})) {
+      if (value && SECRET_NAME_RE.test(name)) values.push(value);
+    }
+  }
+  return values;
+}
 
 async function isFile(path: string): Promise<boolean> {
   try {
@@ -127,7 +150,27 @@ export async function runStep(
   opts: RunStepOptions,
 ): Promise<StepResult & { cached: boolean }> {
   const { contract } = mod;
-  const startedAt = new Date();
+  let startedAt = new Date();
+  const picked = new Set<string>();
+  const message = (err: unknown): string => {
+    const raw = err instanceof Error ? err.message : String(err);
+    return redact(raw, [...envSecrets(process.env, opts.env), ...picked]);
+  };
+  const record = async (r: StepResult): Promise<void> => {
+    await mkdir(join(projectDir, "steps"), { recursive: true });
+    await recordStep(projectDir, r);
+  };
+  const providers: ProviderRegistry = {
+    ...opts.providers,
+    pick: async (...args: Parameters<ProviderRegistry["pick"]>) => {
+      const entry = await opts.providers.pick(...args);
+      if (entry.key) picked.add(entry.key.reveal());
+      return entry;
+    },
+    recordUse: (...a: Parameters<ProviderRegistry["recordUse"]>) => opts.providers.recordUse(...a),
+    markExhausted: (...a: Parameters<ProviderRegistry["markExhausted"]>) =>
+      opts.providers.markExhausted(...a),
+  };
   const result = (
     partial: Pick<StepResult, "status" | "inputsHash"> & Partial<StepResult>,
   ): StepResult => {
@@ -162,9 +205,9 @@ export async function runStep(
       status: "fail",
       inputsHash: "",
       durationMs: 0,
-      error: (err as Error).message,
+      error: message(err),
     });
-    await recordStep(projectDir, failed);
+    await record(failed);
     return { ...failed, cached: false };
   }
 
@@ -176,7 +219,10 @@ export async function runStep(
       (prev.status === "pass" || prev.status === "warn") &&
       (await outputsExist(projectDir, contract.outputs)).length === 0
     ) {
-      return { ...prev, cached: true };
+      const gate = evaluateGate(prev.metrics, mergeThresholds(contract.gate, opts.gateOverrides ?? []));
+      if (gate.status !== "fail") {
+        return { ...prev, status: gate.status, verdicts: gate.verdicts, cached: true };
+      }
     }
   }
 
@@ -184,11 +230,13 @@ export async function runStep(
     projectDir,
     params,
     config: opts.config,
-    providers: opts.providers,
+    providers,
     log: opts.log ?? ((msg) => void process.stderr.write(`[${contract.name}] ${msg}\n`)),
   };
   let final: StepResult;
   try {
+    for (const out of contract.outputs) await rm(resolve(projectDir, out), { force: true });
+    startedAt = new Date();
     const out = await mod.run(ctx);
     const missing = await outputsExist(projectDir, contract.outputs);
     if (missing.length) {
@@ -197,7 +245,7 @@ export async function runStep(
         inputsHash,
         metrics: out.metrics,
         artifacts: out.artifacts,
-        error: `missing declared output: ${missing.join(", ")}`,
+        error: message(new Error(`missing declared output: ${missing.join(", ")}`)),
       });
     } else {
       const gate = evaluateGate(out.metrics, mergeThresholds(contract.gate, opts.gateOverrides ?? []));
@@ -215,9 +263,9 @@ export async function runStep(
     final = result({
       status: "fail",
       inputsHash,
-      error: err instanceof Error ? err.message : String(err),
+      error: message(err),
     });
   }
-  await recordStep(projectDir, final);
+  await record(final);
   return { ...final, cached: false };
 }

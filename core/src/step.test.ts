@@ -26,7 +26,6 @@ after(async () => {
 beforeEach(async () => {
   dir = join(tmp, `Vidéos à monter ${n++}`);
   await mkdir(join(dir, "media"), { recursive: true });
-  await mkdir(join(dir, "steps"), { recursive: true });
   await writeFile(join(dir, "media", "in.txt"), "hello");
 });
 
@@ -269,4 +268,92 @@ test("provider and quota from output are recorded", async () => {
   assert.deepEqual(r.provider, { id: "p", model: "m" });
   assert.deepEqual(r.quota, { requests: 1 });
   assert.equal(await readFile(join(dir, "renders", "out.txt"), "utf8"), "x");
+});
+
+test("secret values are redacted from recorded errors", async () => {
+  const secret = "sk-super-secret-value-123";
+  const { mod } = makeFake();
+  mod.run = async () => {
+    throw new Error(`auth failed for ${secret}`);
+  };
+  const r = await runStep(dir, mod, { ...base(), env: { MY_API_KEY: secret } });
+  assert.equal(r.error, "auth failed for [redacted]");
+  assert.ok(!JSON.stringify(await readLedger(dir)).includes(secret));
+  process.env.MOSTUDIO_TEST_TOKEN = "tok-from-process-env";
+  try {
+    mod.run = async () => {
+      throw new Error("bad tok-from-process-env");
+    };
+    assert.equal((await runStep(dir, mod, base())).error, "bad [redacted]");
+  } finally {
+    delete process.env.MOSTUDIO_TEST_TOKEN;
+  }
+});
+
+test("secrets handed out by providers.pick are redacted", async () => {
+  const reg = {
+    pick: async () => ({ id: "p", key: { name: "K", reveal: () => "picked-key-999", toString: () => "K", toJSON: () => "K" } }),
+    recordUse: async () => {},
+    markExhausted: async () => {},
+  } as unknown as ProviderRegistry;
+  const { mod } = makeFake();
+  mod.run = async (ctx) => {
+    const e = await ctx.providers.pick("llm");
+    throw new Error(`failed with ${e.key?.reveal()}`);
+  };
+  const r = await runStep(dir, mod, { config, providers: reg, log: silent });
+  assert.equal(r.error, "failed with [redacted]");
+});
+
+test("cached pass is re-gated against stricter overrides", async () => {
+  const { mod, calls } = makeFake();
+  await runStep(dir, mod, base());
+  const r = await runStep(dir, mod, {
+    ...base(),
+    gateOverrides: [{ metric: "n", op: ">=", value: 10, level: "fail" }],
+  });
+  assert.equal(r.cached, false);
+  assert.equal(r.status, "fail");
+  assert.equal(calls.n, 2);
+});
+
+test("cached result gets fresh verdicts when gate only warns", async () => {
+  const { mod, calls } = makeFake();
+  await runStep(dir, mod, base());
+  const r = await runStep(dir, mod, {
+    ...base(),
+    gateOverrides: [{ metric: "n", op: ">=", value: 10, level: "warn" }],
+  });
+  assert.equal(r.cached, true);
+  assert.equal(r.status, "warn");
+  assert.equal(calls.n, 1);
+  assert.equal((await readLedger(dir)).steps.fake?.length, 1);
+});
+
+test("stale pre-existing output does not satisfy a step that writes nothing", async () => {
+  await mkdir(join(dir, "renders"), { recursive: true });
+  await writeFile(join(dir, "renders", "out.txt"), "stale");
+  const { mod } = makeFake({}, false);
+  const r = await runStep(dir, mod, base());
+  assert.equal(r.status, "fail");
+  assert.match(r.error ?? "", /renders\/out\.txt/);
+});
+
+test("works without a pre-created steps/ folder", async () => {
+  assert.ok(!existsSync(join(dir, "steps")));
+  const bad = await runStep(dir, makeFake({ inputs: ["media/nope"] }).mod, base());
+  assert.equal(bad.status, "fail");
+  assert.ok(existsSync(join(dir, "steps", "fake.json")));
+});
+
+test("durationMs measures run time only", async () => {
+  const { mod } = makeFake();
+  const inner = mod.run;
+  mod.run = async (ctx) => {
+    await new Promise((r) => setTimeout(r, 30));
+    return inner(ctx);
+  };
+  const r = await runStep(dir, mod, base());
+  assert.ok(r.durationMs >= 25 && r.durationMs < 1000);
+  assert.equal(r.startedAt <= r.endedAt, true);
 });
