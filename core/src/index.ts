@@ -17,6 +17,7 @@ export { evaluateGate, mergeThresholds } from "./gate.ts";
 export { getSecret, loadConfig, loadEnvFile } from "./config.ts";
 export type { Config, Secret } from "./config.ts";
 export { createRegistry, NoProviderError } from "./providers/registry.ts";
+export { parseProviders } from "./providers/parse.ts";
 export type { PickedProvider, PickOptions, ProviderEntry, ProviderRegistry } from "./providers/registry.ts";
 export { nextReset } from "./providers/quota.ts";
 export { createRedactor, publicEnv } from "./redact.ts";

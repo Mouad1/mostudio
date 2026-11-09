@@ -7,6 +7,7 @@ import {
   latest,
   loadConfig,
   loadEnvFile,
+  parseProviders,
   readJson,
   readLedger,
   runStep,
@@ -17,9 +18,29 @@ import { defaultSteps } from "../../steps/index.ts";
 export type Io = {
   stdout: (s: string) => void;
   stderr: (s: string) => void;
+  /** Resolves user-given relative paths (--project, --brief, file params). */
   cwd: string;
   env: Record<string, string>;
+  /** Repo root holding providers.json, mostudio.config.json and .env.local (tests override it). */
+  root?: string;
 };
+
+/** Repo root: io.root, else MOSTUDIO_ROOT, else the repo this CLI file lives in. */
+export function rootOf(io: Io): string {
+  return io.root ?? (io.env.MOSTUDIO_ROOT || resolve(import.meta.dirname, "..", ".."));
+}
+
+async function loadProviders(root: string): Promise<ProviderEntry[]> {
+  const path = join(root, "providers.json");
+  let json: unknown;
+  try {
+    json = await readJson<unknown>(path);
+  } catch (err) {
+    throw new Error(`providers.json at ${path} is not valid JSON: ${(err as Error).message}`, { cause: err });
+  }
+  if (json === undefined) throw new Error(`providers.json not found at ${path} (set MOSTUDIO_ROOT to the mostudio repo)`);
+  return parseProviders(json);
+}
 
 const USAGE = `usage:
   mostudio new <slug> [--brief <file>]
@@ -86,7 +107,7 @@ function formatResult(r: StepResult & { cached?: boolean }): string {
 async function cmdNew(p: Parsed, io: Io, env: Record<string, string>): Promise<number> {
   const slug = p.positional[1];
   if (!slug || p.positional.length > 2) throw new UsageError("new needs exactly one <slug>");
-  const config = await loadConfig(io.cwd, env);
+  const config = await loadConfig(rootOf(io), env);
   const brief = p.brief ? await readFile(resolve(io.cwd, p.brief), "utf8") : undefined;
   await mkdir(config.projectsRoot, { recursive: true });
   const dir = await createProject(config.projectsRoot, slug, brief === undefined ? {} : { brief });
@@ -119,8 +140,8 @@ async function cmdStep(
   }
   const projectDir = await projectDirOf(p, io);
   await assertProjectDir(projectDir);
-  const config = await loadConfig(io.cwd, env);
-  const entries = (await readJson<ProviderEntry[]>(join(io.cwd, "providers.json"))) ?? [];
+  const config = await loadConfig(rootOf(io), env);
+  const entries = await loadProviders(rootOf(io));
   const providers = createRegistry(entries, env, join(config.home, "quota.json"), config.billing);
   const result = await runStep(projectDir, mod, {
     params: p.params,
@@ -167,7 +188,7 @@ export async function main(
       io.stderr(command ? `unknown command: ${command}\n${USAGE}` : USAGE);
       return 64;
     }
-    fileEnv = loadEnvFile(join(io.cwd, ".env.local"));
+    fileEnv = loadEnvFile(join(rootOf(io), ".env.local"));
     const env = { ...fileEnv, ...io.env };
     if (command === "new") return await cmdNew(p, io, env);
     if (command === "step") return await cmdStep(p, io, env, steps);

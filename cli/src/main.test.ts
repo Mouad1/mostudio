@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { StepModule } from "../../core/src/index.ts";
-import { main } from "./main.ts";
+import { main, rootOf } from "./main.ts";
 
 const fakeContract = { inputs: [], outputs: [], gate: [] };
 const steps: Record<string, StepModule> = {
@@ -33,6 +33,7 @@ const mk = (extra: Record<string, string> = {}) => ({
   stdout: (s: string) => void outBuf.push(s),
   stderr: (s: string) => void errBuf.push(s),
   cwd,
+  root: cwd,
   env: env(extra),
 });
 const out = () => outBuf.join("");
@@ -211,4 +212,49 @@ test("catch-all error message is redacted", async () => {
   assert.equal(await run(["new", "redacted", "--brief", secret], { GROQ_API_KEY: secret }), 1);
   assert.match(err(), /\[redacted\]/);
   assert.ok(!err().includes(secret));
+});
+
+test("repo files come from root, not cwd; user paths resolve against cwd", async () => {
+  const elsewhere = mkdtempSync(join(tmpdir(), "mostudio-elsewhere-"));
+  try {
+    writeFileSync(join(elsewhere, "brief.md"), "# elsewhere\n");
+    const io = { ...mk(), cwd: elsewhere };
+    reset();
+    assert.equal(await main(["new", "fromelsewhere", "--brief", "brief.md"], io, steps), 0);
+    const dir = out().trim();
+    assert.ok(dir.startsWith(join(cwd, "projects")));
+    reset();
+    assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 0);
+  } finally {
+    rmSync(elsewhere, { recursive: true, force: true });
+  }
+});
+
+test("root defaults to MOSTUDIO_ROOT, then the CLI's own repo", () => {
+  const base = { stdout: () => {}, stderr: () => {}, cwd: "/tmp" };
+  assert.equal(rootOf({ ...base, env: { MOSTUDIO_ROOT: "/some/root" } }), "/some/root");
+  assert.equal(rootOf({ ...base, env: { MOSTUDIO_ROOT: "" } }), join(import.meta.dirname, "..", ".."));
+  assert.ok(existsSync(join(rootOf({ ...base, env: {} }), "providers.json")));
+  assert.equal(rootOf({ ...base, env: { MOSTUDIO_ROOT: "/a" }, root: "/b" }), "/b");
+});
+
+test("missing or invalid providers.json fails loudly", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mostudio-root-"));
+  try {
+    const io = { ...mk(), root };
+    const dir = await newProject("noproviders");
+    reset();
+    assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 1);
+    assert.match(err(), /providers\.json not found/);
+    writeFileSync(join(root, "providers.json"), "{not json");
+    reset();
+    assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 1);
+    assert.match(err(), /providers\.json/);
+    writeFileSync(join(root, "providers.json"), JSON.stringify([{ id: "x" }]));
+    reset();
+    assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 1);
+    assert.match(err(), /providers\.json\[0\]\.capabilities/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
