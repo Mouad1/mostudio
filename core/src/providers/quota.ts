@@ -48,8 +48,48 @@ export function nextReset(tz: Tz, now: Date): Date {
   return new Date(guess);
 }
 
+function normalize(raw: unknown): ProviderQuota | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const day = r.day as Record<string, unknown> | null | undefined;
+  const validDay =
+    typeof day === "object" &&
+    day !== null &&
+    typeof day.count === "number" &&
+    Number.isFinite(day.count) &&
+    typeof day.resetAt === "string" &&
+    !Number.isNaN(Date.parse(day.resetAt));
+  const out: ProviderQuota = {
+    // resetAt in the past makes currentQuota roll over to a fresh day.
+    day: validDay
+      ? { count: day.count as number, resetAt: day.resetAt as string }
+      : { count: 0, resetAt: new Date(0).toISOString() },
+    minute: Array.isArray(r.minute)
+      ? r.minute.filter((m): m is number => typeof m === "number" && Number.isFinite(m))
+      : [],
+  };
+  if (typeof r.exhaustedUntil === "string" && !Number.isNaN(Date.parse(r.exhaustedUntil))) {
+    out.exhaustedUntil = r.exhaustedUntil;
+  }
+  return out;
+}
+
+/** Quota is derived state: unreadable or malformed content degrades to defaults. */
 export async function loadStore(path: string): Promise<QuotaStore> {
-  return (await readJson<QuotaStore>(path)) ?? {};
+  let raw: unknown;
+  try {
+    raw = await readJson<unknown>(path);
+  } catch (err) {
+    if (err instanceof SyntaxError) return {};
+    throw err;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const store: QuotaStore = {};
+  for (const [id, v] of Object.entries(raw)) {
+    const q = normalize(v);
+    if (q) store[id] = q;
+  }
+  return store;
 }
 
 export async function saveStore(path: string, store: QuotaStore): Promise<void> {

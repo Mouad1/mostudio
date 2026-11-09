@@ -69,3 +69,12 @@ test("loadConfig rejects invalid billing", async () => {
   await writeFile(join(root, "mostudio.config.json"), JSON.stringify({ billing: "yolo" }));
   await assert.rejects(loadConfig(root, {}), /billing/);
 });
+
+test("env file: quoted value with trailing comment, export, '=' in value, CRLF", async () => {
+  const f = join(tmp, "e2.env");
+  await writeFile(
+    f,
+    `A="abc" # note\r\nB='d e'   # n\r\nexport C=v\r\nD=b=c\r\nE="has # hash"\r\nF=plain # c\r\n`,
+  );
+  assert.deepEqual(loadEnvFile(f), { A: "abc", B: "d e", C: "v", D: "b=c", E: "has # hash", F: "plain" });
+});

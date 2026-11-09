@@ -101,13 +101,14 @@ export function createRegistry(
             reasons.push({ id: e.id, reason: "exhausted", until: q.exhaustedUntil });
             continue;
           }
-          if (e.limits.rpd !== undefined && q.day.count >= e.limits.rpd) {
+          if (e.limits.rpd !== undefined && (e.limits.rpd <= 0 || q.day.count >= e.limits.rpd)) {
             reasons.push({ id: e.id, reason: "exhausted", until: q.day.resetAt });
             continue;
           }
           if (e.limits.rpm !== undefined && q.minute.length >= e.limits.rpm) {
-            const oldest = Math.min(...q.minute);
-            reasons.push({ id: e.id, reason: "rate-limited", until: new Date(oldest + 60_000).toISOString() });
+            const r: Reason = { id: e.id, reason: "rate-limited" };
+            if (q.minute.length > 0) r.until = new Date(Math.min(...q.minute) + 60_000).toISOString();
+            reasons.push(r);
             continue;
           }
           const picked: ProviderEntry & { key?: Secret } = {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { inspect } from "node:util";
 import { after, before, test } from "node:test";
 import { createRegistry, NoProviderError } from "./registry.ts";
@@ -197,6 +197,42 @@ test("unknown capability gives NoProviderError naming it with empty reasons", as
     assert.ok(e instanceof NoProviderError);
     assert.deepEqual(e.reasons, []);
     assert.match(e.message, /tts/);
+    return true;
+  });
+});
+
+test("corrupt quota file does not brick pick", async () => {
+  const s = store();
+  await mkdir(dirname(s), { recursive: true });
+  await writeFile(s, "{not json");
+  const reg = createRegistry([entry("a", { limits: { rpd: 5 } })], env, s, "free-only");
+  assert.equal((await reg.pick("stt", { now: t0 })).id, "a");
+  await reg.recordUse("a", t0);
+  assert.equal((await reg.pick("stt", { now: t0 })).id, "a");
+});
+
+test("wrong-shape quota entries do not brick pick", async () => {
+  for (const bad of [`{"a":{}}`, `{"a":{"day":5,"minute":"x"}}`, `{"a":null}`, `[1]`, `"x"`]) {
+    const s = store();
+    await mkdir(dirname(s), { recursive: true });
+    await writeFile(s, bad);
+    const reg = createRegistry([entry("a", { limits: { rpd: 5, rpm: 5 } })], env, s, "free-only");
+    assert.equal((await reg.pick("stt", { now: t0 })).id, "a", bad);
+    await reg.recordUse("a", t0);
+  }
+});
+
+test("rpm 0 and rpd 0 mean no capacity without throwing RangeError", async () => {
+  const reg = createRegistry(
+    [entry("a", { limits: { rpm: 0 } }), entry("b", { priority: { stt: 2 }, limits: { rpd: 0 } })],
+    env,
+    store(),
+    "free-only",
+  );
+  await assert.rejects(reg.pick("stt", { now: t0 }), (e: unknown) => {
+    assert.ok(e instanceof NoProviderError);
+    assert.deepEqual(e.reasons[0], { id: "a", reason: "rate-limited" });
+    assert.equal(e.reasons[1]?.reason, "exhausted");
     return true;
   });
 });

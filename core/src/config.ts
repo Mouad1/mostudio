@@ -52,12 +52,14 @@ export function loadEnvFile(path: string): Record<string, string> {
     const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line);
     if (!m) continue;
     const key = m[1] as string;
-    let value = (m[2] as string).trim();
-    const q = value[0];
-    if ((q === '"' || q === "'") && value.length >= 2 && value.endsWith(q)) {
-      value = value.slice(1, -1);
+    const rest = (m[2] as string).trim();
+    const q = rest[0];
+    let value: string;
+    const close = q === '"' || q === "'" ? rest.indexOf(q, 1) : -1;
+    if (close > 0 && /^(\s*|\s+#.*)$/.test(rest.slice(close + 1))) {
+      value = rest.slice(1, close);
     } else {
-      value = value.replace(/\s+#.*$/, "");
+      value = rest.replace(/\s+#.*$/, "");
     }
     out[key] = value;
   }
