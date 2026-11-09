@@ -43,3 +43,15 @@ test("hashFiles rejects naming a missing file", async () => {
   const missing = join(dir, "missing.bin");
   await assert.rejects(hashFiles([missing], {}), (e: Error) => e.message.includes(missing));
 });
+
+test("hashFiles uses the given key instead of the path", async () => {
+  const other = await mkdtemp(join(tmpdir(), "mostudio-hash-b-"));
+  try {
+    const g = join(other, "a.txt");
+    await writeFile(g, "hello");
+    assert.equal(await hashFiles([{ path: f, key: "a.txt" }], {}), await hashFiles([{ path: g, key: "a.txt" }], {}));
+    assert.notEqual(await hashFiles([f], {}), await hashFiles([g], {}));
+  } finally {
+    await rm(other, { recursive: true, force: true });
+  }
+});

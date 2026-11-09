@@ -1,8 +1,9 @@
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Config } from "./config.ts";
 import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
+import type { HashInput } from "./hash.ts";
 import { readLedger, recordStep } from "./ledger.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { Metrics, StepResult, Threshold } from "./types.ts";
@@ -17,6 +18,8 @@ export type StepContract = {
   fileParams?: string[];
   gate: Threshold[];
   private?: boolean;
+  /** Bump when the step's behaviour changes so cached results are invalidated. Default "0". */
+  version?: string;
 };
 
 export type StepContext = {
@@ -194,7 +197,11 @@ export async function runStep(
   let inputsHash: string;
   try {
     params = resolveParams(contract.params ?? {}, opts.params ?? {});
-    const files = await expandInputs(projectDir, contract.inputs);
+    // Project inputs are keyed relative to the project so moving the folder keeps the cache.
+    const files: HashInput[] = (await expandInputs(projectDir, contract.inputs)).map((p) => ({
+      path: p,
+      key: relative(projectDir, p).split(sep).join("/"),
+    }));
     for (const key of contract.fileParams ?? []) {
       const value = params[key];
       if (typeof value !== "string" || !isAbsolute(value) || !(await isFile(value))) {
@@ -202,7 +209,7 @@ export async function runStep(
       }
       files.push(value);
     }
-    inputsHash = await hashFiles(files, { step: contract.name, params });
+    inputsHash = await hashFiles(files, { step: contract.name, version: contract.version ?? "0", params });
   } catch (err) {
     const failed = result({
       status: "fail",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
@@ -388,4 +388,23 @@ test("a validation failure does not defeat the cache", async () => {
   const r = await runStep(dir, mod, { ...base(), params: { k: "1" } });
   assert.equal(r.cached, true);
   assert.equal(calls.n, 1);
+});
+
+test("moving the project folder keeps the cache", async () => {
+  const { mod, calls } = makeFake();
+  await runStep(dir, mod, base());
+  const moved = `${dir} moved`;
+  await rename(dir, moved);
+  const r = await runStep(moved, mod, base());
+  assert.equal(r.cached, true);
+  assert.equal(calls.n, 1);
+});
+
+test("bumping contract version invalidates the cache", async () => {
+  const { mod, calls } = makeFake();
+  await runStep(dir, mod, base());
+  assert.equal((await runStep(dir, mod, base())).cached, true);
+  mod.contract = { ...mod.contract, version: "2" };
+  assert.equal((await runStep(dir, mod, base())).cached, false);
+  assert.equal(calls.n, 2);
 });
