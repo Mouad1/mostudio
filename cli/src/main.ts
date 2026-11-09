@@ -92,8 +92,8 @@ function formatResult(r: StepResult & { cached?: boolean }): string {
   let line = [`${r.step}  ${r.status}  ${(r.durationMs / 1000).toFixed(1)}s`, ...metrics.length ? [metrics.join(" ")] : []].join("  ");
   if (r.cached) line += "  (cached)";
   const lines = [line];
-  if (r.status === "fail") {
-    if (r.error) lines.push(`error: ${r.error}`);
+  if (r.status === "fail" && r.error) lines.push(`error: ${r.error}`);
+  if (r.status !== "pass") {
     for (const v of r.verdicts) {
       if (v.ok) continue;
       const t = v.threshold;

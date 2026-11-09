@@ -16,6 +16,14 @@ const steps: Record<string, StepModule> = {
     contract: { name: "fake-fail", ...fakeContract, gate: [{ metric: "a", op: ">=", value: 5, level: "fail" }] },
     run: async () => ({ metrics: { a: 1 }, artifacts: [] }),
   },
+  "fake-warn": {
+    contract: { name: "fake-warn", ...fakeContract, gate: [{ metric: "a", op: "between", value: [2, 4], level: "warn" }] },
+    run: async () => ({ metrics: { a: 9 }, artifacts: [] }),
+  },
+  "fake-file": {
+    contract: { name: "fake-file", ...fakeContract, params: { source: "string" }, fileParams: ["source"] },
+    run: async (ctx) => ({ metrics: { source: String(ctx.params.source) }, artifacts: [] }),
+  },
   "fake-throw": {
     contract: { name: "fake-throw", ...fakeContract },
     run: async () => {
@@ -257,4 +265,12 @@ test("missing or invalid providers.json fails loudly", async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("warn status prints the failed warn verdicts", async () => {
+  const dir = await newProject("warning");
+  reset();
+  assert.equal(await run(["step", "fake-warn", "--project", dir]), 0);
+  assert.match(out(), /^fake-warn {2}warn /m);
+  assert.match(out(), /^ {2}✗ a between 2\.\.4 \(actual 9\)$/m);
 });
