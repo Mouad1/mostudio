@@ -49,3 +49,26 @@ test("mergeThresholds keeps position and appends unmatched", () => {
   const sameMetricOtherLevel: Threshold = { ...speed, level: "fail" };
   assert.deepEqual(mergeThresholds([lufs, speed], [extra, o, sameMetricOtherLevel]), [o, speed, extra, sameMetricOtherLevel]);
 });
+test("unknown op is not ok", () => {
+  const t = { metric: "m", op: "~=", value: 1, level: "fail" } as unknown as Threshold;
+  assert.equal(evaluateGate({ m: 1 }, [t]).verdicts[0].ok, false);
+});
+test("invalid threshold entries do not throw", () => {
+  const r = evaluateGate({ m: 1 }, [null, undefined, 5, []] as unknown as Threshold[]);
+  assert.equal(r.status, "fail");
+  assert.ok(r.verdicts.every((v) => !v.ok && v.metric === "<invalid>"));
+});
+test("malformed between bounds and numeric values are not ok", () => {
+  const mk = (op: Threshold["op"], value: unknown) => ({ metric: "m", op, value, level: "fail" }) as Threshold;
+  for (const value of [[null, 5], ["2", "10"], [1], [1, 2, 3], [Number.NaN, 5], [0, Infinity]]) {
+    assert.equal(evaluateGate({ m: 3 }, [mk("between", value)]).verdicts[0].ok, false);
+  }
+  for (const value of ["1", null, Number.NaN, Infinity]) {
+    assert.equal(evaluateGate({ m: 3 }, [mk(">", value)]).verdicts[0].ok, false);
+  }
+});
+test("mergeThresholds appends every unmatched override in order", () => {
+  const a: Threshold = { metric: "x", op: ">", value: 1, level: "warn" };
+  const b: Threshold = { metric: "x", op: ">", value: 2, level: "warn" };
+  assert.deepEqual(mergeThresholds([], [a, b]), [a, b]);
+});
