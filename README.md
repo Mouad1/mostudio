@@ -13,7 +13,7 @@ Status: pre-alpha.
 
 Free-tier provider keys (Groq, Gemini, …) are read from the environment. Two ways to provide them:
 
-- **Bitwarden Secrets Manager (recommended):** store the machine-account access token in the macOS keychain once (`security add-generic-password -a "$USER" -s bws-hermes -w`), then run commands through `cli/bin/mostudio-bws` instead of `cli/bin/mostudio.ts`. Keys exist only in that process. `cli/bin/mostudio-bws --check` lists which keys are available (names only). Override with `MOSTUDIO_BWS_KEYCHAIN` and `MOSTUDIO_BWS_SERVER` (default `https://vault.bitwarden.com`).
+- **Bitwarden Secrets Manager (recommended):** store the machine-account access token in the macOS keychain once (`security add-generic-password -a "$USER" -s bws-hermes -w`), then run commands through `cli/bin/mostudio-bws` instead of `cli/bin/mostudio.ts`. It goes through MoOS (`moos secrets run hermes -- …`), which forces the right Bitwarden server; keys exist only in that process. `cli/bin/mostudio-bws --check` lists which keys are available (names only). Override with `MOSTUDIO_BWS_PROJECT` (default `hermes`) and `MOOS_BIN` (path to `moos`).
 - **`.env.local`:** copy `.env.example` to `.env.local` (gitignored) and fill the values.
 
 ## Test
