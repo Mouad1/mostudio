@@ -4,11 +4,11 @@ import { keepDuration, readJson, rmsEnvelope, writeJsonAtomic } from "../../../c
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import fillers from "../fillers.json" with { type: "json" };
-import { fillerWords, keepRanges, midWordCuts, phrases, retakeSpans } from "./detect.ts";
+import type { FillerList } from "./detect.ts";
+import { fillerWords, keepRanges, midWordCuts, retakeEvents } from "./detect.ts";
 
 const WINDOW_MS = 10;
 const FADE_SEC = 0.01;
-const RETAKE_WINDOW_SEC = 20;
 const RETAKE_K = 3;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
@@ -31,27 +31,32 @@ export const cut: StepModule = {
     const pre = num(ctx.params.pre, preset.pre);
     const post = num(ctx.params.post, preset.post);
     const minKeep = num(ctx.params.minKeep, 0.3);
+    const maxRetakeSec = num(ctx.params.maxRetakeSec, 8);
     const retakes = typeof ctx.params.retakes === "boolean" ? ctx.params.retakes : true;
 
     const ingest = await readJson<{ file: string; durationSec: number }>(join(ctx.projectDir, "media", "ingest.json"));
     if (!ingest?.file) throw new Error("media/ingest.json has no file");
     const tr = await readJson<{ words: Word[] }>(join(ctx.projectDir, "transcript", "words.json"));
-    const words = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end)).sort((a, b) => a.start - b.start);
+    const words = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start).sort((a, b) => a.start - b.start);
     if (words.length === 0) throw new Error("no words in transcript/words.json: nothing to cut (is the clip silent or music-only?)");
 
     const env = await rmsEnvelope(join(ctx.projectDir, "transcript", "audio.wav"), WINDOW_MS);
     const durationSec = ingest.durationSec > 0 ? ingest.durationSec : round3((env.length * WINDOW_MS) / 1000);
 
-    const fillerIdx = new Set(fillerWords(words, fillers));
+    const fillerIdx = new Set(fillerWords(words, fillers as FillerList));
     const retakeIdx = new Set<number>();
     let retakesRemoved = 0;
+    let retakePhrasesRemoved = 0;
+    let longestRetakeSec = 0;
     if (retakes) {
-      const spans = retakeSpans(words, RETAKE_WINDOW_SEC, RETAKE_K);
+      const spans = retakeEvents(words, maxRetakeSec, RETAKE_K);
+      retakesRemoved = spans.length;
+      retakePhrasesRemoved = spans.reduce((n, e) => n + e.phrases, 0);
+      longestRetakeSec = round3(Math.max(0, ...spans.map((e) => e.sec)));
       const eps = 1e-6;
       words.forEach((w, i) => {
         if (spans.some((s) => w.start >= s.start - eps && w.end <= s.end + eps)) retakeIdx.add(i);
       });
-      retakesRemoved = phrases(words).filter((p) => retakeIdx.has(p.first) && retakeIdx.has(p.last)).length;
     }
     const removedIdx = new Set<number>([...fillerIdx, ...retakeIdx]);
     const fillersRemoved = [...fillerIdx].filter((i) => !retakeIdx.has(i)).length;
@@ -96,6 +101,9 @@ export const cut: StepModule = {
       midWordCuts: midWordCuts(keep, words, removedIdx),
       shortestKeepSec: keep.length === 0 ? 0 : round3(Math.min(...keep.map((k) => k.end - k.start))),
       fillersRemoved,
+      droppedWords: words.filter((w, i) => !removedIdx.has(i) && !keep.some((k) => (w.start + w.end) / 2 >= k.start && (w.start + w.end) / 2 <= k.end)).length,
+      retakePhrasesRemoved,
+      longestRetakeSec,
       retakesRemoved,
       outDurationSec,
       pace,

@@ -81,3 +81,39 @@ test("zero words keeps nothing and gives a clear error", async () => {
   assert.equal(r.status, "fail");
   assert.match(JSON.stringify(r), /no words/);
 });
+
+test("end to end: filler, retake and long pause", async () => {
+  execFileSync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=6.6:sample_rate=16000",
+    "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono:d=2",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=1.9:sample_rate=16000",
+    "-filter_complex", "[0][1][2]concat=n=3:v=0:a=1", "-ac", "1", "-c:a", "pcm_s16le", join(dir, "transcript", "audio.wav"),
+  ]);
+  const w = (word: string, start: number, end: number) => ({ w: word, start, end });
+  await seed(
+    [
+      w("bonjour", 0.5, 1.0), w("euh", 1.1, 1.6), w("à", 1.7, 1.9), w("tous", 1.95, 2.3),
+      w("on", 3.2, 3.4), w("va", 3.4, 3.6), w("voir", 3.6, 4.0),
+      w("on", 5.0, 5.2), w("va", 5.2, 5.4), w("voir", 5.4, 5.8), w("comment", 5.9, 6.4),
+      w("zzz", 7.0, 6.9),
+      w("ça", 8.8, 9.1), w("marche", 9.2, 9.8),
+    ],
+    10.5,
+  );
+  const r = await run();
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  const edl = JSON.parse(await readFile(join(dir, "cut", "edl.json"), "utf8"));
+  const near = (a: number, b: number, tol = 0.1) => Math.abs(a - b) <= tol;
+  assert.equal(edl.keep.length, 4, JSON.stringify(edl.keep));
+  assert.deepEqual(edl.removed.map((x: { reason: string }) => x.reason), ["silence", "filler", "retake", "silence", "silence"]);
+  assert.ok(near(edl.removed[1].start, 1.05) && near(edl.removed[1].end, 1.65), JSON.stringify(edl.removed[1]));
+  assert.ok(near(edl.removed[2].start, 2.45) && near(edl.removed[2].end, 4.9), JSON.stringify(edl.removed[2]));
+  assert.ok(near(edl.removed[3].start, 6.55) && near(edl.removed[3].end, 8.7), JSON.stringify(edl.removed[3]));
+  assert.equal(r.metrics.fillersRemoved, 1);
+  assert.equal(r.metrics.retakesRemoved, 1);
+  assert.equal(r.metrics.retakePhrasesRemoved, 1);
+  assert.equal(r.metrics.longestRetakeSec, 1.8);
+  assert.equal(r.metrics.droppedWords, 0);
+  assert.equal(r.metrics.midWordCuts, 0);
+});

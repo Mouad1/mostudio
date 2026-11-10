@@ -1,1 +1,1 @@
-["euh","heu","hum","hmm","um","uh","erm","ah","eh","bah"]
+{ "always": ["euh", "heu", "hum", "hmm", "um", "uh", "erm"], "isolated": ["ah", "eh", "bah"] }

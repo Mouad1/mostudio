@@ -1,19 +1,48 @@
 {
   "name": "cut",
   "version": "1",
-  "inputs": ["media/ingest.json", "transcript/words.json", "transcript/audio.wav"],
-  "outputs": ["cut/edl.json"],
+  "inputs": [
+    "media/ingest.json",
+    "transcript/words.json",
+    "transcript/audio.wav"
+  ],
+  "outputs": [
+    "cut/edl.json"
+  ],
   "params": {
     "pace": "string?",
     "maxGap": "number?",
     "pre": "number?",
     "post": "number?",
     "minKeep": "number?",
-    "retakes": "boolean?"
+    "retakes": "boolean?",
+    "maxRetakeSec": "number?"
   },
   "private": true,
   "gate": [
-    { "metric": "midWordCuts", "op": "==", "value": 0, "level": "fail" },
-    { "metric": "removedPct", "op": "<=", "value": 60, "level": "warn" }
+    {
+      "metric": "midWordCuts",
+      "op": "==",
+      "value": 0,
+      "level": "fail"
+    },
+    {
+      "metric": "droppedWords",
+      "op": "==",
+      "value": 0,
+      "level": "fail"
+    },
+    {
+      "metric": "removedPct",
+      "op": "<=",
+      "value": 60,
+      "level": "warn"
+    },
+    {
+      "metric": "longestRetakeSec",
+      "op": "<=",
+      "value": 8,
+      "level": "warn"
+    }
   ]
 }

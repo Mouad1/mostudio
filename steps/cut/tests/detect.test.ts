@@ -81,13 +81,55 @@ test("boundaries never land inside a word", () => {
   assert.equal(midWordCuts([{ start: 1.1, end: 2 }], [W("x", 1, 1.5)]), 1);
 });
 
-test("edl keep ranges sorted, non-overlapping, within duration, minKeep dropped", () => {
+test("edl keep ranges sorted, non-overlapping, within duration", () => {
   const words = [W("a", 0.02, 0.2), W("b", 5, 5.02), W("c", 9, 9.5), W("d", 9.6, 10)];
   const keep = keepRanges(words, new Set(), opts({ durationSec: 10.05 }));
-  assert.ok(keep.every((k) => k.end - k.start >= 0.3));
-  assert.equal(keep.length, 2, "b is shorter than minKeep");
-  assert.ok(keep[0] && keep[0].start >= 0 && keep.at(-1) && (keep.at(-1) as { end: number }).end <= 10.05);
+  assert.equal(keep.length, 3);
+  assert.ok(keep[0] && keep[0].start >= 0 && (keep.at(-1) as { end: number }).end <= 10.05);
   for (let i = 1; i < keep.length; i++) assert.ok((keep[i] as { start: number }).start > (keep[i - 1] as { end: number }).end);
+});
+
+test("isolated 0.1 s word survives under tight and is extended toward minKeep", () => {
+  const words = [W("bonjour", 1, 1.5), W("oui", 5, 5.1), W("merci", 9, 9.5)];
+  const keep = keepRanges(words, new Set(), opts({ maxGap: 0.25, pre: 0.05, post: 0.08 }));
+  assert.equal(keep.length, 3);
+  const k = keep[1] as { start: number; end: number };
+  assert.ok(k.start <= 5 && k.end >= 5.1);
+  assert.ok(k.end - k.start >= 0.3 - 1e-9, `len ${k.end - k.start}`);
+});
+
+test("euh [oui] euh keeps oui, without entering the fillers", () => {
+  const words = [W("euh", 1, 1.4), W("oui", 1.5, 1.6), W("euh", 1.7, 2.1)];
+  const keep = keepRanges(words, new Set([0, 2]), opts());
+  assert.equal(keep.length, 1);
+  const k = keep[0] as { start: number; end: number };
+  assert.ok(k.start >= 1.4 && k.start <= 1.5 && k.end >= 1.6 && k.end <= 1.7, JSON.stringify(k));
+});
+
+test("keep with no room to grow is kept as is", () => {
+  const words = [W("a", 1, 1.1), W("b", 1.12, 1.2), W("c", 1.22, 1.3)];
+  const keep = keepRanges(words, new Set([0, 2]), opts({ pre: 0.5, post: 0.5 }));
+  assert.equal(keep.length, 1);
+});
+
+test("retake window: same opening 15 s apart is not removed", () => {
+  const words = [W("on", 1, 1.2), W("va", 1.2, 1.4), W("voir", 1.4, 1.8), W("on", 16, 16.2), W("va", 16.2, 16.4), W("voir", 16.4, 16.8)];
+  assert.deepEqual(retakeSpans(words, 8, 3), []);
+  assert.equal(retakeSpans(words, 20, 3).length, 1);
+});
+
+test("retake matching does not collapse letter runs", () => {
+  const A = (t: number, w: string): Word[] => [W("on", t, t + 0.2), W("va", t + 0.2, t + 0.4), W(w, t + 0.4, t + 0.8)];
+  assert.deepEqual(retakeSpans([...A(1, "pas"), ...A(3, "passs")], 8, 3), []);
+});
+
+test("soft fillers: ah in a continuous phrase is kept, isolated ah is removed", () => {
+  const phrase = [W("ah", 1, 1.2), W("bon", 1.25, 1.6), W("alors", 1.65, 2)];
+  assert.deepEqual(fillerWords(phrase, { always: ["euh"], isolated: ["ah", "eh", "bah"] }), []);
+  const iso = [W("alors", 1, 1.4), W("ah", 2, 2.2), W("bon", 2.25, 2.6)];
+  assert.deepEqual(fillerWords(iso, { always: ["euh"], isolated: ["ah"] }), [1]);
+  const long = [W("alors", 1, 1.4), W("ah", 2, 2.6), W("bon", 3.2, 3.5)];
+  assert.deepEqual(fillerWords(long, { always: ["euh"], isolated: ["ah"] }), []);
 });
 
 test("empty input gives no keeps", () => {
