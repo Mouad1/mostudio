@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { getSecret } from "../config.ts";
 import { NonRetryableError, ProviderHttpError } from "./call.ts";
+import { withProvider } from "./call.ts";
 import { chatComplete, transcribeAudio } from "./openai-compat.ts";
 import type { FetchLike } from "./openai-compat.ts";
 import type { PickedProvider } from "./registry.ts";
@@ -139,13 +140,13 @@ test("key straddling the 200-char cut is fully redacted", async () => {
   });
 });
 
-test("empty key and missing config are NonRetryableError", async () => {
+test("empty key and missing baseUrl are ordinary (retryable) errors", async () => {
   const f = fakeFetch(200, {});
   const empty = { reveal: () => "", name: "K" } as unknown as PickedProvider["key"];
-  await assert.rejects(chatComplete(provider({ key: empty }), [], { fetchImpl: f.impl }), (e: unknown) => e instanceof NonRetryableError);
+  await assert.rejects(chatComplete(provider({ key: empty }), [], { fetchImpl: f.impl }), (e: unknown) => e instanceof Error && !(e instanceof NonRetryableError) && /key/.test(e.message));
   await assert.rejects(
     chatComplete(provider({ baseUrl: undefined as never }), [], { fetchImpl: f.impl }),
-    (e: unknown) => e instanceof NonRetryableError,
+    (e: unknown) => e instanceof Error && !(e instanceof NonRetryableError) && /baseUrl/.test(e.message),
   );
   assert.equal(f.seen.length, 0);
 });
@@ -157,4 +158,32 @@ test("transcribeAudio missing file is NonRetryableError without HTTP", async () 
     (e: unknown) => e instanceof NonRetryableError && /cannot read audio file/.test(e.message),
   );
   assert.equal(f.seen.length, 0);
+});
+
+test("withProvider rotates past a provider with config error", async () => {
+  const providers = [provider({ id: "a", baseUrl: undefined as never }), provider({ id: "b" })];
+  const used: string[] = [];
+  const exhausted: string[] = [];
+  const registry = {
+    async pick(_c: string, o?: { exclude?: string[] }) {
+      const p = providers.find((x) => !o?.exclude?.includes(x.id));
+      if (!p) throw new Error("none");
+      return p;
+    },
+    async recordUse(id: string) {
+      used.push(id);
+    },
+    async markExhausted(id: string) {
+      exhausted.push(id);
+    },
+  };
+  const f = fakeFetch(200, { choices: [{ message: { content: "hi" } }] });
+  const out = await withProvider(registry, "llm", (p) => chatComplete(p, [{ role: "user", content: "x" }], { fetchImpl: f.impl }));
+  assert.equal(out.result, "hi");
+  assert.equal(out.provider.id, "b");
+  assert.equal(out.attempts.length, 1);
+  assert.equal(out.attempts[0]?.id, "a");
+  assert.match(out.attempts[0]?.error ?? "", /baseUrl/);
+  assert.deepEqual(used, ["b"]);
+  assert.deepEqual(exhausted, []);
 });

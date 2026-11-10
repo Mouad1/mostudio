@@ -10,13 +10,13 @@ export type Word = { w: string; start: number; end: number; conf?: number };
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
 function endpoint(p: PickedProvider, path: string): string {
-  if (!p.baseUrl) throw new NonRetryableError(`${p.id}: provider has no baseUrl`);
+  if (!p.baseUrl) throw new Error(`${p.id}: provider has no baseUrl`);
   return `${p.baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
 function bearer(p: PickedProvider): string {
   const key = p.key?.reveal();
-  if (!key) throw new NonRetryableError(`${p.id}: API key required (${p.keyEnv ?? "no keyEnv"})`);
+  if (!key) throw new Error(`${p.id}: API key required (${p.keyEnv ?? "no keyEnv"})`);
   return `Bearer ${key}`;
 }
 
