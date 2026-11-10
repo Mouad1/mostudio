@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Run mostudio with API keys loaded from Bitwarden Secrets Manager (bws run).
+# Keys live only in the child process environment: nothing is written to disk.
+#
+#   mostudio-bws <mostudio args...>   run a mostudio command
+#   mostudio-bws --check              list which provider keys are available (names only)
+#
+# Settings (all optional):
+#   BWS_ACCESS_TOKEN        used as-is when already set
+#   MOSTUDIO_BWS_KEYCHAIN   macOS keychain service holding the token (default: bws-hermes)
+#   MOSTUDIO_BWS_SERVER     Bitwarden server (default: https://vault.bitwarden.com)
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/../.." && pwd)"
+cli="$here/mostudio.ts"
+
+command -v bws >/dev/null 2>&1 || { echo "mostudio-bws: bws not found; install Bitwarden Secrets Manager CLI or use mostudio with .env.local" >&2; exit 1; }
+
+token="${BWS_ACCESS_TOKEN:-}"
+if [ -z "$token" ]; then
+  service="${MOSTUDIO_BWS_KEYCHAIN:-bws-hermes}"
+  token="$(security find-generic-password -s "$service" -w 2>/dev/null)" || {
+    echo "mostudio-bws: no token in keychain item '$service' (security add-generic-password -a \"\$USER\" -s $service -w)" >&2
+    exit 1
+  }
+fi
+
+export BWS_SERVER_URL="${MOSTUDIO_BWS_SERVER:-https://vault.bitwarden.com}"
+export BWS_ACCESS_TOKEN="$token"
+unset token
+
+if [ "${1:-}" = "--check" ]; then
+  # Prints provider key names and whether each is set; never values.
+  inner="node -e $(printf '%q' "
+    const p = require('$root/providers.json');
+    const names = [...new Set(p.flatMap(e => e.keyEnv ? [e.keyEnv] : []))].sort();
+    for (const n of names) console.log((process.env[n] ? 'set     ' : 'missing ') + n);
+  ")"
+else
+  inner="node $(printf '%q' "$cli")"
+  for arg in "$@"; do inner+=" $(printf '%q' "$arg")"; done
+fi
+
+exec bws run -- "$inner"
