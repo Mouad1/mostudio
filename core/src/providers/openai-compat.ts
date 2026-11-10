@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { ProviderHttpError } from "./call.ts";
+import { NonRetryableError, ProviderHttpError } from "./call.ts";
 import type { PickedProvider } from "./registry.ts";
 
 export type FetchLike = typeof fetch;
@@ -10,22 +10,24 @@ export type Word = { w: string; start: number; end: number; conf?: number };
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
 function endpoint(p: PickedProvider, path: string): string {
-  if (!p.baseUrl) throw new Error(`${p.id}: provider has no baseUrl`);
+  if (!p.baseUrl) throw new NonRetryableError(`${p.id}: provider has no baseUrl`);
   return `${p.baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
 function bearer(p: PickedProvider): string {
-  if (!p.key) throw new Error(`${p.id}: API key required (${p.keyEnv ?? "no keyEnv"})`);
-  return `Bearer ${p.key.reveal()}`;
+  const key = p.key?.reveal();
+  if (!key) throw new NonRetryableError(`${p.id}: API key required (${p.keyEnv ?? "no keyEnv"})`);
+  return `Bearer ${key}`;
 }
 
 async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<unknown> {
   const res = await f(url, { ...init, method: "POST", signal: AbortSignal.timeout(timeoutMs) });
   const text = await res.text();
   if (!res.ok) {
-    let snippet = text.slice(0, 200);
+    let redacted = text;
     const secret = p.key?.reveal();
-    if (secret) snippet = snippet.split(secret).join("[redacted]");
+    if (secret) redacted = redacted.split(secret).join("[redacted]");
+    const snippet = redacted.slice(0, 200);
     throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${snippet}`);
   }
   try {
@@ -73,8 +75,14 @@ export async function transcribeAudio(
 }> {
   const url = endpoint(p, "/audio/transcriptions");
   const auth = bearer(p);
+  let audio: Awaited<ReturnType<typeof readFile>>;
+  try {
+    audio = await readFile(audioPath);
+  } catch (e) {
+    throw new NonRetryableError(`cannot read audio file ${audioPath}: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const form = new FormData();
-  form.append("file", new Blob([await readFile(audioPath)]), basename(audioPath));
+  form.append("file", new Blob([audio]), basename(audioPath));
   form.append("model", p.model);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");

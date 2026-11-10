@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { withProvider, ProviderHttpError } from "./call.ts";
+import { NonRetryableError, withProvider, ProviderHttpError } from "./call.ts";
 import { NoProviderError } from "./registry.ts";
 import type { PickedProvider, PickOptions, ProviderRegistry } from "./registry.ts";
 
@@ -127,4 +127,53 @@ test("withProvider stops at maxAttempts", async () => {
     ),
   );
   assert.equal(calls, 2);
+});
+
+test("recordUse failure still returns the result and does not rotate", async () => {
+  const { registry } = fakeRegistry(["a", "b"]);
+  registry.recordUse = async () => {
+    throw new Error("disk full");
+  };
+  let calls = 0;
+  const out = await withProvider(registry, "stt", async () => {
+    calls++;
+    return "good";
+  });
+  assert.equal(out.result, "good");
+  assert.equal(out.provider.id, "a");
+  assert.equal(calls, 1);
+});
+
+test("maxAttempts exhaustion throws NoProviderError with attempts", async () => {
+  const { registry } = fakeRegistry(["a", "b", "c"]);
+  await assert.rejects(
+    withProvider(
+      registry,
+      "stt",
+      async (p) => {
+        throw new Error(`${p.id} down`);
+      },
+      { maxAttempts: 2 },
+    ),
+    (e: unknown) => {
+      assert.ok(e instanceof NoProviderError);
+      assert.match(e.message, /attempts: a: a down; b: b down/);
+      return true;
+    },
+  );
+});
+
+test("NonRetryableError is rethrown without rotating", async () => {
+  const { registry, log } = fakeRegistry(["a", "b"]);
+  let calls = 0;
+  await assert.rejects(
+    withProvider(registry, "stt", async () => {
+      calls++;
+      throw new NonRetryableError("no such file");
+    }),
+    (e: unknown) => e instanceof NonRetryableError,
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(log.used, []);
+  assert.deepEqual(log.exhausted, []);
 });

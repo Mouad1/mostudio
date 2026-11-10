@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { getSecret } from "../config.ts";
-import { ProviderHttpError } from "./call.ts";
+import { NonRetryableError, ProviderHttpError } from "./call.ts";
 import { chatComplete, transcribeAudio } from "./openai-compat.ts";
 import type { FetchLike } from "./openai-compat.ts";
 import type { PickedProvider } from "./registry.ts";
@@ -126,4 +126,35 @@ test("transcribeAudio falls back to opts.language / unknown", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("key straddling the 200-char cut is fully redacted", async () => {
+  const body = "x".repeat(195) + "sk-secret-123" + "y".repeat(50);
+  const f = fakeFetch(401, body);
+  await assert.rejects(chatComplete(provider(), [{ role: "user", content: "hi" }], { fetchImpl: f.impl }), (e: unknown) => {
+    assert.ok(e instanceof ProviderHttpError);
+    assert.ok(!e.message.includes("sk-secret"));
+    assert.ok(!e.message.includes("sk-secre"));
+    return true;
+  });
+});
+
+test("empty key and missing config are NonRetryableError", async () => {
+  const f = fakeFetch(200, {});
+  const empty = { reveal: () => "", name: "K" } as unknown as PickedProvider["key"];
+  await assert.rejects(chatComplete(provider({ key: empty }), [], { fetchImpl: f.impl }), (e: unknown) => e instanceof NonRetryableError);
+  await assert.rejects(
+    chatComplete(provider({ baseUrl: undefined as never }), [], { fetchImpl: f.impl }),
+    (e: unknown) => e instanceof NonRetryableError,
+  );
+  assert.equal(f.seen.length, 0);
+});
+
+test("transcribeAudio missing file is NonRetryableError without HTTP", async () => {
+  const f = fakeFetch(200, {});
+  await assert.rejects(
+    transcribeAudio(provider(), "/nonexistent/zzz.wav", { fetchImpl: f.impl }),
+    (e: unknown) => e instanceof NonRetryableError && /cannot read audio file/.test(e.message),
+  );
+  assert.equal(f.seen.length, 0);
 });
