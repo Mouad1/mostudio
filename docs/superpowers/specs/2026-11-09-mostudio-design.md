@@ -70,6 +70,7 @@ flowchart LR
 - **Visual layer is agent-written.** For each visual scene the agent writes HyperFrames HTML, starting from a component in `components/` (reference examples, not a rigid template library). This is what avoids the templated look.
 - Visual scenes are rendered as separate clips, then assembled by ffmpeg. This keeps the edit layer renderer-neutral and makes later NLE export easy.
 - Renderers in v1: HyperFrames (Apache 2.0) for visuals, ffmpeg for everything else. Remotion dropped (needs a paid company license for commercial use).
+- Render split (2026-11-10): short videos (≤ 3 min) render captions and overlays with HyperFrames (`npx hyperframes@0.9.26`, our own CSS-animated components, offline, no GSAP/CDN); long videos burn captions with ffmpeg/libass because HyperFrames renders at ~2.6× real time. ffmpeg is picked by capability (`FFMPEG` → Homebrew `ffmpeg-full` → PATH), and the Mac hardware encoder `h264_videotoolbox` is used when present.
 
 ### 4.2 storyboard.json (decided)
 
