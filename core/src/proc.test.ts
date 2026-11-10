@@ -31,3 +31,64 @@ test("runBin reports a non-zero exit with stderr tail", async () => {
     /failed: bad thing/,
   );
 });
+
+// --- resolveFfmpeg / pickH264Encoder (fake ffmpeg scripts) ---
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before } from "node:test";
+import { _resetFfmpegCache, pickH264Encoder, resolveFfmpeg } from "./proc.ts";
+
+let fakeDir: string;
+before(async () => {
+  fakeDir = await mkdtemp(join(tmpdir(), "mostudio-fakeff-"));
+});
+after(async () => {
+  await rm(fakeDir, { recursive: true, force: true });
+});
+
+async function fake(name: string, filters: string[], encoders: string[] = []): Promise<string> {
+  const p = join(fakeDir, name);
+  const fl = filters.map((f) => ` T.. ${f.padEnd(16)} A->A       desc`).join("\n");
+  const en = encoders.map((e) => ` V....D ${e.padEnd(18)} encoder`).join("\n");
+  await writeFile(
+    p,
+    `#!/bin/sh\ncase "$*" in\n*-filters*) cat <<'EOT'\nFilters:\n  T.. = Timeline support\n ---\n${fl}\nEOT\n;;\n*-encoders*) cat <<'EOT'\nEncoders:\n ------\n${en}\nEOT\n;;\nesac\n`,
+  );
+  await chmod(p, 0o755);
+  return p;
+}
+
+test("resolveFfmpeg skips a build missing a needed filter", async () => {
+  _resetFfmpegCache();
+  const a = await fake("ff-a", ["scale", "overlay"]);
+  const b = await fake("ff-b", ["scale", "overlay", "ass"]);
+  assert.equal(await resolveFfmpeg({ FFMPEG: a }, ["ass", "scale"], [b]), b);
+});
+
+test("resolveFfmpeg prefers env FFMPEG when it satisfies needs", async () => {
+  _resetFfmpegCache();
+  const a = await fake("ff-c", ["ass"]);
+  const b = await fake("ff-d", ["ass"]);
+  assert.equal(await resolveFfmpeg({ FFMPEG: a }, ["ass"], [b]), a);
+  assert.equal(await resolveFfmpeg({ FFMPEG: "" }, ["ass"], [b]), b);
+});
+
+test("resolveFfmpeg error names what each candidate lacks", async () => {
+  _resetFfmpegCache();
+  const a = await fake("ff-e", ["scale"]);
+  const missing = join(fakeDir, "does-not-exist");
+  await assert.rejects(resolveFfmpeg({ FFMPEG: a }, ["ass", "drawtext"], [missing]), (e: Error) => {
+    assert.ok(e.message.includes(a) && e.message.includes("ass") && e.message.includes("drawtext"));
+    assert.ok(e.message.includes(missing) && e.message.includes("not found"));
+    return true;
+  });
+});
+
+test("pickH264Encoder prefers videotoolbox, falls back to libx264, env forces software", async () => {
+  const hw = await fake("ff-hw", [], ["libx264", "h264_videotoolbox"]);
+  const sw = await fake("ff-sw", [], ["libx264"]);
+  assert.equal(await pickH264Encoder(hw, {}), "h264_videotoolbox");
+  assert.equal(await pickH264Encoder(sw, {}), "libx264");
+  assert.equal(await pickH264Encoder(hw, { MOSTUDIO_ENCODER: "libx264" }), "libx264");
+});

@@ -509,3 +509,34 @@ test("malformed gateOverrides are recorded as a fail, not thrown", async () => {
   assert.equal(calls.n, 0);
   assert.equal(latest(await readLedger(dir), "fake")?.status, "fail");
 });
+
+test("optional param may be absent", async () => {
+  let seen: Record<string, unknown> | undefined;
+  const { mod } = makeFake({ params: { music: "string?", n: "number?" } });
+  const run = mod.run;
+  mod.run = async (ctx) => {
+    seen = ctx.params;
+    return run(ctx);
+  };
+  const r = await runStep(dir, mod, base());
+  assert.equal(r.status, "pass");
+  assert.ok(seen && !("music" in seen) && !("n" in seen));
+});
+
+test("optional param is coerced and checked when given", async () => {
+  const { mod } = makeFake({ params: { n: "number?" } });
+  assert.equal((await runStep(dir, mod, { ...base(), params: { n: "3" } })).status, "pass");
+  const bad = await runStep(dir, mod, { ...base(), params: { n: "x" }, force: true });
+  assert.equal(bad.status, "fail");
+  assert.match(bad.error ?? "", /must be a number/);
+});
+
+test("optional fileParam absent is not required", async () => {
+  const { mod } = makeFake({ params: { music: "string?" }, fileParams: ["music"] });
+  assert.equal((await runStep(dir, mod, base())).status, "pass");
+  const music = join(dir, "media", "m.txt");
+  await writeFile(music, "m");
+  const r = await runStep(dir, mod, { ...base(), params: { music } });
+  assert.equal(r.status, "pass");
+  assert.equal(r.cached, false);
+});

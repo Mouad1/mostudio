@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const SUBDIRS = ["media", "cache", "scenes", "renders", "steps"];
+const SUBDIRS = ["media", "cache", "scenes", "renders", "steps", "edits"];
 
 function localDate(d: Date): string {
   const y = String(d.getFullYear()).padStart(4, "0");
@@ -24,5 +24,6 @@ export async function createProject(
   await mkdir(dir); // throws EEXIST if the project already exists
   for (const d of SUBDIRS) await mkdir(join(dir, d));
   await writeFile(join(dir, "brief.md"), opts.brief ?? "# Brief\n");
+  await writeFile(join(dir, "edits", "replacements.txt"), "# wrong => right (one per line)\n");
   return dir;
 }

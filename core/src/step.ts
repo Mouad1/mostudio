@@ -10,12 +10,15 @@ import { createRedactor, publicEnv } from "./redact.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { Metrics, StepResult, Threshold } from "./types.ts";
 
+export type ParamType = "string" | "number" | "boolean" | "string?" | "number?" | "boolean?";
+
 export type StepContract = {
   name: string;
   /** Paths relative to the project folder; a glob is allowed only as `<dir>/*`. */
   inputs: string[];
   outputs: string[];
-  params?: Record<string, "string" | "number" | "boolean">;
+  /** A trailing `?` marks the param optional: absent -> omitted from ctx.params. */
+  params?: Record<string, ParamType>;
   /** Names of params holding absolute file paths; the files' bytes join the input hash. */
   fileParams?: string[];
   gate: Threshold[];
@@ -67,15 +70,20 @@ async function isFile(path: string): Promise<boolean> {
 
 /** Coerce CLI strings to declared number/boolean, then check types and undeclared extras. */
 function resolveParams(
-  declared: Record<string, "string" | "number" | "boolean">,
+  declared: Record<string, ParamType>,
   given: Record<string, unknown>,
 ): Record<string, unknown> {
   const extras = Object.keys(given).filter((k) => !(k in declared));
   if (extras.length) throw new Error(`undeclared params: ${extras.join(", ")}`);
   const out: Record<string, unknown> = {};
-  for (const [key, type] of Object.entries(declared)) {
+  for (const [key, declaredType] of Object.entries(declared)) {
+    const optional = declaredType.endsWith("?");
+    const type = optional ? declaredType.slice(0, -1) : declaredType;
     let value = given[key];
-    if (value === undefined) throw new Error(`missing param: ${key}`);
+    if (value === undefined) {
+      if (optional) continue;
+      throw new Error(`missing param: ${key}`);
+    }
     if (type === "number" && typeof value === "string") {
       const num = value.trim() === "" ? Number.NaN : Number(value);
       if (Number.isNaN(num)) throw new Error(`param ${key} must be a number`);
@@ -224,6 +232,7 @@ export async function runStep(
     }));
     for (const key of contract.fileParams ?? []) {
       const value = params[key];
+      if (value === undefined && contract.params?.[key]?.endsWith("?")) continue;
       if (typeof value !== "string" || !isAbsolute(value) || !(await isFile(value))) {
         throw new Error(`fileParam ${key} must be an absolute path to an existing file`);
       }

@@ -43,3 +43,11 @@ test("createProject works under a path with spaces and accents", async () => {
   const dir = await createProject(root, "accent-test");
   assert.ok(statSync(join(dir, "steps")).isDirectory());
 });
+
+test("new project has edits/replacements.txt", async () => {
+  const dir = await createProject(tmp, "edits-demo", { date: new Date("2026-11-09T10:00:00Z") });
+  assert.equal(
+    await readFile(join(dir, "edits", "replacements.txt"), "utf8"),
+    "# wrong => right (one per line)\n",
+  );
+});
