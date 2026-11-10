@@ -1,6 +1,6 @@
 # ADR 0002: Render path (HyperFrames scene to ffmpeg assembly)
 
-Status: proposed (pending user acceptance)
+Status: accepted (user, 2026-11-10)
 Date: 2026-11-09
 Spike: `spikes/s2-render/` (`node spikes/s2-render/run.ts`, results in `spikes/s2-render/report.md`)
 
