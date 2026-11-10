@@ -1,0 +1,13 @@
+{
+  "name": "transcribe",
+  "version": "1",
+  "inputs": ["media/ingest.json"],
+  "outputs": ["transcript/audio.wav", "transcript/words.json"],
+  "params": { "language": "string?", "prefer": "string?" },
+  "private": true,
+  "gate": [
+    { "metric": "pctTimestamped", "op": ">=", "value": 95, "level": "fail" },
+    { "metric": "meanConfidence", "op": ">=", "value": 0.7, "level": "warn" },
+    { "metric": "wordCount", "op": ">", "value": 0, "level": "fail" }
+  ]
+}
