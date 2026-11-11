@@ -16,6 +16,17 @@ Free-tier provider keys (Groq, Gemini, …) are read from the environment. Two w
 - **Bitwarden Secrets Manager (recommended):** store the machine-account access token in the macOS keychain once (`security add-generic-password -a "$USER" -s bws-hermes -w`), then run commands through `cli/bin/mostudio-bws` instead of `cli/bin/mostudio.ts`. It goes through MoOS (`moos secrets run hermes -- …`), which forces the right Bitwarden server; keys exist only in that process. `cli/bin/mostudio-bws --check` lists which keys are available (names only). Override with `MOSTUDIO_BWS_PROJECT` (default `hermes`) and `MOOS_BIN` (path to `moos`).
 - **`.env.local`:** copy `.env.example` to `.env.local` (gitignored) and fill the values.
 
+## Workflows
+
+`workflows/<name>.json` chains steps; `mostudio run <name> --project <dir>` runs them in order, skipping cached steps, and stops at the first failure. Shipped: `rough-cut` (16:9, youtube preset) and `short` (9:16, tight pace, shorts preset).
+
+```
+mostudio run rough-cut --project projects/<slug> [--param <step>.<key>=<value>]... [--force <step>]... [--json]
+mostudio approve captions --project projects/<slug>
+```
+
+A step with `"approve": true` pauses the run (exit 3) after it succeeds. Review its outputs (for captions: `captions/captions.txt`, fixes go in `edits/replacements.txt`), re-run the same command, then `mostudio approve <step>`; the next run continues. Approval is tied to the step's input hash, so changing its inputs asks again. `--param` overrides the workflow's own params for that step. Exit codes: 0 done, 2 failed, 3 awaiting approval, 64 usage error.
+
 ## Test
 
 ```

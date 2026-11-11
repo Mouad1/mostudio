@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -23,6 +23,10 @@ const steps: Record<string, StepModule> = {
   "fake-file": {
     contract: { name: "fake-file", ...fakeContract, params: { source: "string" }, fileParams: ["source"] },
     run: async (ctx) => ({ metrics: { source: String(ctx.params.source) }, artifacts: [] }),
+  },
+  captions: {
+    contract: { name: "captions", ...fakeContract, params: { width: "number?" } },
+    run: async (ctx) => ({ metrics: { width: Number(ctx.params.width ?? 0) }, artifacts: [] }),
   },
   "fake-throw": {
     contract: { name: "fake-throw", ...fakeContract },
@@ -290,4 +294,112 @@ test("inherited object keys are not step names", async () => {
     assert.equal(await run(["step", name, "--project", dir]), 64, name);
     assert.match(err(), /unknown step/);
   }
+});
+
+const writeWf = (name: string, wf: unknown) => {
+  mkdirSync(join(cwd, "workflows"), { recursive: true });
+  writeFileSync(join(cwd, "workflows", `${name}.json`), JSON.stringify(wf));
+};
+
+test("run prints a line per step then a done summary", async () => {
+  writeWf("wf-ok", { name: "wf-ok", steps: [{ step: "fake", params: { n: 1 } }, { step: "fake-warn" }] });
+  const dir = await newProject("run-ok");
+  reset();
+  assert.equal(await run(["run", "wf-ok", "--project", dir]), 0);
+  assert.match(out(), /^fake {2}pass .*a=1/m);
+  assert.match(out(), /^fake-warn {2}warn /m);
+  assert.match(out(), /^wf-ok: done$/m);
+});
+
+test("CLI run maps --param step.key=value to that step", async () => {
+  writeWf("wf-param", { name: "wf-param", steps: [{ step: "fake", params: { n: 1 } }, { step: "captions", params: { width: 1920 } }] });
+  const dir = await newProject("run-param");
+  reset();
+  assert.equal(await run(["run", "wf-param", "--project", dir, "--param", "fake.n=5", "--param", "captions.width=1080"]), 0);
+  assert.match(out(), /^fake {2}pass .*a=5/m);
+  assert.match(out(), /^captions {2}pass .*width=1080/m);
+});
+
+test("run rejects --param for a step outside the workflow", async () => {
+  writeWf("wf-p2", { name: "wf-p2", steps: [{ step: "fake", params: { n: 1 } }] });
+  const dir = await newProject("run-badparam");
+  reset();
+  assert.equal(await run(["run", "wf-p2", "--project", dir, "--param", "nope.x=1"]), 64);
+  assert.match(err(), /nope/);
+  reset();
+  assert.equal(await run(["run", "wf-p2", "--project", dir, "--param", "n=1"]), 64);
+});
+
+test("run exits 2 and names the failing step", async () => {
+  writeWf("wf-fail", { name: "wf-fail", steps: [{ step: "fake-fail" }, { step: "fake", params: { n: 1 } }] });
+  const dir = await newProject("run-fail");
+  reset();
+  assert.equal(await run(["run", "wf-fail", "--project", dir]), 2);
+  assert.match(out(), /^wf-fail: failed at fake-fail$/m);
+  assert.doesNotMatch(out(), /^fake {2}/m);
+});
+
+test("CLI exit 3 on awaiting approval names the review files, approve resumes", async () => {
+  writeWf("wf-appr", { name: "wf-appr", steps: [{ step: "captions", approve: true }, { step: "fake", params: { n: 1 } }] });
+  const dir = await newProject("run-approve");
+  reset();
+  assert.equal(await run(["run", "wf-appr", "--project", dir]), 3);
+  assert.match(out(), /^wf-appr: awaiting approval at captions$/m);
+  assert.match(out(), /review captions\/captions\.txt, add fixes to edits\/replacements\.txt, re-run the same command, then: mostudio approve captions --project /);
+  reset();
+  assert.equal(await run(["approve", "captions", "--project", dir]), 0);
+  reset();
+  assert.equal(await run(["run", "wf-appr", "--project", dir]), 0);
+  assert.match(out(), /^captions .*\(cached\)$/m);
+  assert.match(out(), /^wf-appr: done$/m);
+});
+
+test("run uses a generic review message for other steps", async () => {
+  writeWf("wf-gen", { name: "wf-gen", steps: [{ step: "fake", params: { n: 1 }, approve: true }] });
+  const dir = await newProject("run-generic");
+  reset();
+  assert.equal(await run(["run", "wf-gen", "--project", dir]), 3);
+  assert.match(out(), /review the outputs of fake, then: mostudio approve fake --project /);
+});
+
+test("run --json prints status, stoppedAt and results", async () => {
+  writeWf("wf-json", { name: "wf-json", steps: [{ step: "captions", approve: true }] });
+  const dir = await newProject("run-json");
+  reset();
+  assert.equal(await run(["run", "wf-json", "--project", dir, "--json"]), 3);
+  const r = JSON.parse(out());
+  assert.equal(r.status, "awaiting-approval");
+  assert.equal(r.stoppedAt, "captions");
+  assert.equal(r.results[0].step, "captions");
+});
+
+test("run --force reruns only that step", async () => {
+  writeWf("wf-force", { name: "wf-force", steps: [{ step: "fake", params: { n: 1 } }, { step: "fake-warn" }] });
+  const dir = await newProject("run-force");
+  reset();
+  await run(["run", "wf-force", "--project", dir]);
+  reset();
+  assert.equal(await run(["run", "wf-force", "--project", dir, "--force", "fake-warn"]), 0);
+  assert.match(out(), /^fake .*\(cached\)$/m);
+  assert.doesNotMatch(out(), /^fake-warn .*\(cached\)$/m);
+});
+
+test("run exits 64 for unknown workflow (listing available) and unknown step", async () => {
+  writeWf("wf-known", { name: "wf-known", steps: [{ step: "fake", params: { n: 1 } }] });
+  writeWf("wf-badstep", { name: "wf-badstep", steps: [{ step: "ghost" }] });
+  const dir = await newProject("run-unknown");
+  reset();
+  assert.equal(await run(["run", "nope", "--project", dir]), 64);
+  assert.match(err(), /unknown workflow: nope/);
+  assert.match(err(), /wf-known/);
+  reset();
+  assert.equal(await run(["run", "wf-badstep", "--project", dir]), 64);
+  assert.match(err(), /unknown step "ghost"/);
+});
+
+test("approve exits 1 when the step has no passing result", async () => {
+  const dir = await newProject("approve-none");
+  reset();
+  assert.equal(await run(["approve", "captions", "--project", dir]), 1);
+  assert.match(err(), /no passing result/);
 });

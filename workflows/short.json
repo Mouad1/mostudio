@@ -1,0 +1,12 @@
+{
+  "name": "short",
+  "steps": [
+    { "step": "ingest" },
+    { "step": "transcribe" },
+    { "step": "cut", "params": { "pace": "tight" } },
+    { "step": "captions", "approve": true, "params": { "style": "short", "width": 1080, "height": 1920 } },
+    { "step": "mix" },
+    { "step": "assemble", "params": { "preset": "shorts" } },
+    { "step": "qa" }
+  ]
+}

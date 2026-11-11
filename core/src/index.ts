@@ -29,9 +29,11 @@ export { pickH264Encoder, resolveBin, resolveFfmpeg, runBin, runBinCapture } fro
 export type { BinName } from "./proc.ts";
 export type { Redactor } from "./redact.ts";
 export { runStep } from "./step.ts";
-export type { ParamType, StepContext, StepContract, StepModule, StepOutput } from "./step.ts";
+export type { ParamType, RunStepOptions, StepContext, StepContract, StepModule, StepOutput } from "./step.ts";
 export { keepDuration, mapToCut } from "./timeline.ts";
 export type { Range } from "./timeline.ts";
 export { quietestPoint, rmsEnvelope } from "./audio/envelope.ts";
 export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.ts";
 export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
+export { approveStep, parseWorkflow, runWorkflow } from "./workflow.ts";
+export type { RunWorkflowOptions, Workflow, WorkflowResult } from "./workflow.ts";

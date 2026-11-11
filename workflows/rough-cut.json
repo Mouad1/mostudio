@@ -1,0 +1,13 @@
+{
+  "name": "rough-cut",
+  "steps": [
+    { "step": "ingest" },
+    { "step": "transcribe" },
+    { "step": "cut" },
+    { "step": "captions", "approve": true, "params": { "width": 1920, "height": 1080 } },
+    { "step": "mix" },
+    { "step": "chapters" },
+    { "step": "assemble", "params": { "preset": "youtube" } },
+    { "step": "qa" }
+  ]
+}
