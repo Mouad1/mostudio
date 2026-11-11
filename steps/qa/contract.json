@@ -1,0 +1,13 @@
+{
+  "name": "qa",
+  "version": "1",
+  "inputs": ["renders/final.mp4"],
+  "outputs": ["renders/contact-sheet.jpg", "renders/qa.md"],
+  "params": {},
+  "private": true,
+  "gate": [
+    { "metric": "blackStartSec", "op": "<=", "value": 0.1, "level": "fail" },
+    { "metric": "silentStartSec", "op": "<=", "value": 0.5, "level": "fail" },
+    { "metric": "integratedLufs", "op": "between", "value": [-15, -13], "level": "warn" }
+  ]
+}
