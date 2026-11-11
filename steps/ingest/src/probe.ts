@@ -2,7 +2,10 @@ import { resolveBin, runBin } from "../../../core/src/index.ts";
 
 export type ProbeResult = {
   durationSec: number;
+  /** Frame rate snapped to a standard rate when within 0.5% (see snapFps). */
   fps: number;
+  /** Frame rate as measured by ffprobe (3 decimals). */
+  fpsRaw: number;
   width: number;
   height: number;
   rotation: number;
@@ -43,6 +46,15 @@ function parseRate(rate: string | undefined): number {
 
 const round = (n: number, d: number): number => Math.round(n * 10 ** d) / 10 ** d;
 
+const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+
+/** The nearest standard rate when within 0.5% (phone VFR averages like 29.94 -> 29.97), else the raw rate (3 decimals). */
+export function snapFps(raw: number): number {
+  if (!(raw > 0)) return 0;
+  const near = STANDARD_FPS.reduce((a, b) => (Math.abs(b - raw) < Math.abs(a - raw) ? b : a));
+  return Math.abs(near - raw) / near <= 0.005 ? near : round(raw, 3);
+}
+
 function rotationOf(v: Stream): number {
   const raw = v.side_data_list?.find((s) => typeof s.rotation === "number")?.rotation ?? Number(v.tags?.rotate ?? 0);
   const deg = Number.isFinite(raw) ? Math.round(Math.abs(raw) / 90) * 90 : 0;
@@ -70,7 +82,8 @@ export async function probe(file: string, env: Record<string, string | undefined
   const swap = rotation === 90 || rotation === 270;
   const result: ProbeResult = {
     durationSec: round(Number.isFinite(duration) ? duration : 0, 3),
-    fps: round(fps, 3),
+    fps: snapFps(fps),
+    fpsRaw: round(fps, 3),
     width: swap ? h : w,
     height: swap ? w : h,
     rotation,

@@ -1,6 +1,6 @@
 {
   "name": "ingest",
-  "version": "2",
+  "version": "3",
   "inputs": [],
   "outputs": ["media/ingest.json"],
   "params": { "source": "string" },

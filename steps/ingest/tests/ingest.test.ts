@@ -8,7 +8,7 @@ import { after, before, beforeEach, test } from "node:test";
 import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
 import { resolveBin, runBin, runStep } from "../../../core/src/index.ts";
 import { ingest } from "../src/ingest.ts";
-import { probe } from "../src/probe.ts";
+import { probe, snapFps } from "../src/probe.ts";
 import { makeClip } from "./fixtures.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
@@ -126,4 +126,27 @@ test("HLG-tagged clip records colorTransfer and hdr", async () => {
 test("SDR clip is not hdr", async () => {
   const r = await runStep(dir, ingest, { params: { source: clip }, ...base });
   assert.equal(r.metrics.hdr, false);
+});
+
+test("snapFps snaps to a standard rate within 0.5%, else keeps the raw rate", () => {
+  assert.equal(snapFps(29.97002997), 29.97);
+  assert.equal(snapFps(29.94), 29.97);
+  assert.equal(snapFps(23.98), 23.976);
+  assert.equal(snapFps(59.8), 59.94);
+  assert.equal(snapFps(25.1), 25);
+  assert.equal(snapFps(27.5), 27.5);
+  assert.equal(snapFps(0), 0);
+});
+
+test("ingest records fps snapped and fpsRaw", async () => {
+  const f = join(tmp, "src", "ntsc.mp4");
+  await runBin(resolveBin("ffmpeg", process.env), [
+    "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30000/1001:duration=1", "-f", "lavfi", "-i", "sine=duration=1",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f,
+  ]);
+  const r = await runStep(dir, ingest, { params: { source: f }, ...base });
+  assert.equal(r.metrics.fps, 29.97);
+  const j = JSON.parse(readFileSync(join(dir, "media", "ingest.json"), "utf8"));
+  assert.equal(j.fps, 29.97);
+  assert.ok(Math.abs(j.fpsRaw - 29.97) < 0.01, String(j.fpsRaw));
 });
