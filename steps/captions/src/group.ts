@@ -32,7 +32,7 @@ export function toCutWords(words: Word[], keep: Range[]): CutWord[] {
 }
 
 /** Group cut-timeline words into cues. Never crosses a keep boundary; min 0.5 s (extended into the following gap, never past the cut-end of its keep), max 5 s. */
-export function buildCues(words: CutWord[], style: CaptionStyle, segEnds: number[] = []): Cue[] {
+export function buildCues(words: CutWord[], style: CaptionStyle, segEnds: number[]): Cue[] {
   const groups: CutWord[][] = [];
   let cur: CutWord[] = [];
   let chars = 0;

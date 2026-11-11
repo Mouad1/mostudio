@@ -43,23 +43,23 @@ const run = (params: Record<string, unknown> = {}) => runStep(dir, captions, { p
 
 test("long style keeps lines ≤ 42 chars", () => {
   const words = seq("the quick brown fox jumps over the lazy dog while another quick brown fox watches from afar today".split(" "));
-  const cues = buildCues(toCutWords(words, [{ start: 0, end: 100 }]), "long");
+  const cues = buildCues(toCutWords(words, [{ start: 0, end: 100 }]), "long", [100]);
   assert.ok(cues.length > 1);
   for (const c of cues) assert.ok(c.text.length <= 42, c.text);
   assert.equal(cues.map((c) => c.text).join(" "), words.map((w) => w.w).join(" "));
 });
 
 test("long style splits on a gap > 0.6 s and on 5 s", () => {
-  const gap = buildCues(toCutWords([W("a", 0, 0.3), W("b", 1.0, 1.3)], [{ start: 0, end: 10 }]), "long");
+  const gap = buildCues(toCutWords([W("a", 0, 0.3), W("b", 1.0, 1.3)], [{ start: 0, end: 10 }]), "long", [10]);
   assert.equal(gap.length, 2);
-  const slow = buildCues(toCutWords(seq(["a", "b", "c", "d", "e", "f"], 0, 1.0), [{ start: 0, end: 10 }]), "long");
+  const slow = buildCues(toCutWords(seq(["a", "b", "c", "d", "e", "f"], 0, 1.0), [{ start: 0, end: 10 }]), "long", [10]);
   for (const c of slow) assert.ok(c.end - c.start <= 5 + 1e-9);
   assert.ok(slow.length >= 2);
 });
 
 test("short style ≤ 3 words with karaoke tags", () => {
   const words = seq(["one", "two", "three", "four", "five"]);
-  const cues = buildCues(toCutWords(words, [{ start: 0, end: 10 }]), "short");
+  const cues = buildCues(toCutWords(words, [{ start: 0, end: 10 }]), "short", [10]);
   assert.deepEqual(cues.map((c) => c.words.length), [3, 2]);
   const text = assDialogueText(cues[0], "short");
   assert.match(text, /^\{\\k30\}one \{\\k30\}two \{\\k30\}three$/);
@@ -77,7 +77,7 @@ test("cue times are in the cut timeline and never cross a cut", () => {
   const keep = [{ start: 0.9, end: 2 }, { start: 4.9, end: 6 }];
   const cw = toCutWords(words, keep);
   assert.equal(cw.length, 4);
-  const cues = buildCues(cw, "long");
+  const cues = buildCues(cw, "long", [1.1, 2.2]);
   assert.equal(cues.length, 2);
   assert.deepEqual([cues[0].text, cues[1].text], ["a b", "c d"]);
   const off = 2 - 0.9;
@@ -87,10 +87,10 @@ test("cue times are in the cut timeline and never cross a cut", () => {
 
 test("min-length extension never crosses a cut", () => {
   const keep = [{ start: 0, end: 1 }, { start: 5, end: 6 }];
-  const cw = toCutWords([W("a", 0.8, 0.9), W("b", 5.0, 5.4)], keep);
+  const cw = toCutWords([W("a", 0.8, 0.9), W("b", 5.5, 5.9)], keep);
   const cues = buildCues(cw, "long", [1, 2]);
   assert.equal(cues.length, 2);
-  assert.ok(cues[0].end <= 1 + 1e-9, String(cues[0].end));
+  assert.ok(cues[0].end <= 1.0 + 1e-9, String(cues[0].end));
   assert.ok(cues[1].end - cues[1].start >= 0.4 - 1e-9);
 });
 
@@ -102,7 +102,7 @@ test("word partly trimmed by padding is clamped into its keep", () => {
 });
 
 test("min cue length 0.5 s without overlapping the next cue", () => {
-  const cues = buildCues(toCutWords([W("a", 0, 0.1), W("b", 0.9, 1.0), W("c", 2, 2.1)], [{ start: 0, end: 10 }]), "long");
+  const cues = buildCues(toCutWords([W("a", 0, 0.1), W("b", 0.9, 1.0), W("c", 2, 2.1)], [{ start: 0, end: 10 }]), "long", [10]);
   assert.equal(cues.length, 3);
   assert.ok(cues[0].end - cues[0].start >= 0.5 - 1e-9);
   assert.ok(cues[0].end <= cues[1].start + 1e-9);
