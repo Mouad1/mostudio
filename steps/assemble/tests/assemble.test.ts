@@ -118,7 +118,10 @@ test("150 keep ranges render in batches without error", async () => {
   const dir = await project("batches");
   const keep = Array.from({ length: 150 }, (_, i) => ({ start: i * 0.15, end: i * 0.15 + 0.1 }));
   const out = await seed(dir, keep, { w: 160, h: 120, srcSec: 23 });
-  const r = await run(dir, { burnCaptions: false });
+  const logs: string[] = [];
+  const r = await run(dir, { burnCaptions: false }, process.env, (l) => logs.push(l));
+  for (const i of [1, 2, 3]) assert.ok(logs.some((l) => l.includes(`batch ${i}/3`)), logs.join("\n"));
+  assert.ok(logs.some((l) => /CFR intermediate/.test(l)) && logs.some((l) => /final encode/.test(l)), logs.join("\n"));
   assert.equal(r.status, "pass", JSON.stringify(r));
   const m = r.metrics as Record<string, number | string | boolean>;
   assert.equal(m.batches, 3);
@@ -199,6 +202,7 @@ test("shorts preset ≤ 180 s defaults to hyperframes captions", async () => {
   await writeFile(join(dir, "scenes", "captions", "index.html"), "old");
   const logs: string[] = [];
   const r = await run(dir, { preset: "shorts" }, { ...process.env, MOSTUDIO_HYPERFRAMES_BIN: bin }, (m) => logs.push(m));
+  assert.ok(logs.some((l) => /HyperFrames render/.test(l)), logs.join("\n"));
   assert.ok(logs.some((l) => /warning: .*assets\/logo\.png/.test(l) && !/index\.html/.test(l)), logs.join("\n"));
   assert.equal(r.status, "pass", JSON.stringify(r));
   const m = r.metrics as Record<string, number | string | boolean>;

@@ -42,7 +42,8 @@ async function seed(keep: { start: number; end: number }[], file = "media/clip.w
   return out;
 }
 
-const run = (params: Record<string, unknown> = {}) => runStep(dir, mix, { params, config, providers: registry, force: true });
+const run = (params: Record<string, unknown> = {}, log?: (m: string) => void) =>
+  runStep(dir, mix, { params, config, providers: registry, force: true, ...(log ? { log } : {}) });
 
 test("mix hits -14 LUFS +-1 and duration equals outDurationSec", async () => {
   makeVoice(join(dir, "media", "clip.wav"), 12);
@@ -63,8 +64,11 @@ test("200 segments mix without error (batching)", async () => {
   makeVoice(join(dir, "media", "clip.wav"), 25);
   const keep = Array.from({ length: 200 }, (_, i) => ({ start: i * 0.12, end: i * 0.12 + 0.1 }));
   const out = await seed(keep);
-  const r = await run();
+  const logs: string[] = [];
+  const r = await run({}, (l) => logs.push(l));
   assert.equal(r.status, "pass", JSON.stringify(r));
+  for (const i of [1, 2, 3]) assert.ok(logs.some((l) => l.includes(`mix batch ${i}/3`)), logs.join("\n"));
+  assert.ok(logs.some((l) => /loudness pass 1/.test(l)), logs.join("\n"));
   const m = r.metrics as Record<string, number | boolean>;
   assert.equal(m.segments, 200);
   assert.equal(m.batches, 3);

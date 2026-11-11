@@ -263,10 +263,12 @@ export const assemble: StepModule = {
         if (!(Math.abs(got - outDur) <= 0.1)) {
           throw new Error(`HyperFrames render is ${round(got, 3)} s, expected ${round(outDur, 3)} s (scenes/captions)`);
         }
+        ctx.log("assemble: final encode (HyperFrames video + mix)…");
         await writeOutputAtomic(finalPath, (tmp) =>
           runBin(ffmpeg, [...BASE, "-i", captioned, "-i", mixWav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", ...audio, ...tail, tmp], FF_TIMEOUT_MS).then(() => {}),
         );
       } else {
+        ctx.log(`assemble: final encode (${round(outDur, 1)} s, ${size.width}x${size.height}, captions ${renderer})…`);
         const vf = renderer === "ass" ? `${preset},ass=filename=${escapeFilterPath(join(ctx.projectDir, "captions", "captions.ass"))}` : preset;
         await writeOutputAtomic(finalPath, (tmp) =>
           runBin(

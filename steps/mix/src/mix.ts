@@ -91,7 +91,9 @@ export const mix: StepModule = {
     try {
       // voice: cut + fades, in batches so the filter graph stays small
       const batches: string[] = [];
+      const nBatches = Math.ceil(keeps.length / BATCH);
       for (let i = 0; i < keeps.length; i += BATCH) {
+        ctx.log(`mix batch ${i / BATCH + 1}/${nBatches}`);
         const file = join(cache, `batch-${String(batches.length).padStart(3, "0")}.wav`);
         const graph = voiceGraph(keeps.slice(i, i + BATCH), fadeSec);
         await runBin(ffmpeg, [...BASE, "-i", source, "-filter_complex", graph, "-map", "[out]", ...PCM_F, file], MIX_TIMEOUT_MS);
@@ -139,6 +141,7 @@ export const mix: StepModule = {
       let gain = target - i0;
       let passes = 1;
       let chosen = join(cache, "pass-1.wav");
+      ctx.log("loudness pass 1");
       await render(gain, chosen);
       let got = await measureLoudness(chosen, ctx.env);
       if (got.integratedLufs < target - 0.5) {
@@ -146,6 +149,7 @@ export const mix: StepModule = {
         if (gain > MAX_GAIN_DB) throw new Error(`voice too quiet (I0 = ${round(i0, 1)} LUFS)`);
         passes = 2;
         chosen = join(cache, "pass-2.wav");
+        ctx.log("loudness pass 2");
         await render(gain, chosen);
         got = await measureLoudness(chosen, ctx.env);
       }
