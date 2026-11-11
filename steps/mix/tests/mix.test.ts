@@ -215,3 +215,15 @@ test("missing or audio-less music file gives a clear error", async () => {
   const r2 = await run({ music: join(dir, "silentvid.mp4") });
   assert.match(JSON.stringify(r2), /no audio track/);
 });
+
+test("320 segments mix in 4 batches with no drift", async () => {
+  makeVoice(join(dir, "media", "clip.wav"), 24);
+  const keep = Array.from({ length: 320 }, (_, i) => ({ start: 0.1 + i * 0.07, end: 0.1 + i * 0.07 + 0.05 }));
+  const out = await seed(keep);
+  const r = await run();
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  const m = r.metrics as Record<string, number | boolean>;
+  assert.equal(m.segments, 320);
+  assert.equal(m.batches, 4);
+  assert.ok((m.driftSec as number) <= 0.02, String(m.driftSec));
+});
