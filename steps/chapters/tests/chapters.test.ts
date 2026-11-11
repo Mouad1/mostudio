@@ -151,3 +151,36 @@ test("postProcess snaps to sentence starts, trims titles on a word boundary", ()
   assert.equal(out[1].start, 60);
   assert.ok(out[1].title.length <= 50 && !out[1].title.endsWith(" "));
 });
+
+test("parseChapters accepts numeric strings, m:ss and h:mm:ss, and prose around the JSON", () => {
+  const r = parseChapters('Sure! {"chapters":[{"start":"12","title":"a"},{"start":"1:05","title":"b"},{"start":"01:01:05","title":"c"},{"start":"0:30.5","title":"d"}]} Hope it helps', 4000);
+  assert.deepEqual(r.map((c) => c.start), [12, 65, 3665, 30.5]);
+  assert.throws(() => parseChapters('{"chapters":[{"start":"soon","title":"a"}]}', 100));
+});
+
+test("failed attempts are logged with their elapsed time and the call has a 45 s timeout", async () => {
+  await seed(talk(240), [{ start: 0, end: 300 }]);
+  fakeLlm({ bad: "nope", good: JSON.stringify({ chapters: [{ start: 0, title: "One" }, { start: 100, title: "Two" }, { start: 200, title: "Three" }] }) });
+  const logs: string[] = [];
+  const r = await runStep(dir, chapters, { params: {}, config, providers: registry(["bad", "good"]), force: true, log: (m) => logs.push(m) });
+  assert.equal(r.metrics.provider, "good");
+  assert.ok(logs.some((l) => /chapters: bad failed: .*not valid JSON \(\d+ ms\)/.test(l)), logs.join("\n"));
+});
+
+test("fallback count is the total including the chapter at 0", async () => {
+  await seed(talk(300, 10), [{ start: 0, end: 400 }]);
+  fakeLlm({});
+  const r = await run([]);
+  assert.equal(r.metrics.fallback, true);
+  assert.equal(r.metrics.chapterCount, 2);
+});
+
+test("empty cut transcript skips the model and gives one fallback chapter", async () => {
+  await seed([], [{ start: 0, end: 60 }]);
+  fakeLlm({});
+  const r = await run(["gem"]);
+  assert.equal(bodies.length, 0);
+  assert.equal(r.metrics.chapterCount, 1);
+  assert.equal(r.metrics.fallback, true);
+  assert.equal(r.metrics.firstAtZero, true);
+});

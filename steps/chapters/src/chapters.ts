@@ -11,6 +11,7 @@ const MIN_GAP_SEC = 10;
 const SNAP_SEC = 10;
 const SENTENCE_GAP_SEC = 0.6;
 const MAX_TITLE = 50;
+const LLM_TIMEOUT_MS = 45_000;
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
@@ -39,6 +40,16 @@ export function formatYoutube(chs: Chapter[]): string {
     .join("\n") + "\n";
 }
 
+/** Seconds from a number, a numeric string, or `m:ss` / `mm:ss` / `h:mm:ss`; NaN otherwise. */
+function toSeconds(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v !== "string") return Number.NaN;
+  const t = v.trim();
+  if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+  const m = /^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d+)?)$/.exec(t);
+  return m ? Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) : Number.NaN;
+}
+
 /** Parse + validate the model's reply; throws so withProvider rotates to the next provider. */
 export function parseChapters(raw: string, outDurationSec: number): Chapter[] {
   const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -46,13 +57,21 @@ export function parseChapters(raw: string, outDurationSec: number): Chapter[] {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("model reply is not valid JSON");
+    const a = text.indexOf("{");
+    const b = text.lastIndexOf("}");
+    try {
+      if (a < 0 || b <= a) throw new Error("none");
+      data = JSON.parse(text.slice(a, b + 1));
+    } catch {
+      throw new Error("model reply is not valid JSON");
+    }
   }
   const list = Array.isArray(data) ? data : (data as { chapters?: unknown } | null)?.chapters;
   if (!Array.isArray(list) || list.length === 0) throw new Error("model reply has no chapters");
   return list.map((c, i) => {
-    const { start, title } = (c ?? {}) as { start?: unknown; title?: unknown };
-    if (typeof start !== "number" || !Number.isFinite(start) || start < 0 || start >= outDurationSec) throw new Error(`chapter ${i}: start out of range`);
+    const { start: rawStart, title } = (c ?? {}) as { start?: unknown; title?: unknown };
+    const start = toSeconds(rawStart);
+    if (!Number.isFinite(start) || start < 0 || start >= outDurationSec) throw new Error(`chapter ${i}: start out of range`);
     if (typeof title !== "string" || title.trim() === "") throw new Error(`chapter ${i}: empty title`);
     return { start, title: title.trim() };
   });
@@ -105,7 +124,7 @@ export function fallbackChapters(words: Word[], outDurationSec: number): Chapter
   const gaps = words.slice(1).map((w, i) => ({ at: w.start, gap: w.start - words[i].end })).sort((a, b) => b.gap - a.gap);
   const starts = [0];
   for (const g of gaps) {
-    if (starts.length > target) break;
+    if (starts.length >= target) break;
     if (g.at < MIN_GAP_SEC || outDurationSec - g.at < MIN_GAP_SEC) continue;
     if (starts.some((s) => Math.abs(s - g.at) < MIN_GAP_SEC)) continue;
     starts.push(g.at);
@@ -132,15 +151,27 @@ export const chapters: StepModule = {
     let provider: { id: string; model: string } | undefined;
     if (outDur < 30) {
       list = [{ start: 0, title: firstWords(words, 0) }];
+    } else if (words.length === 0) {
+      list = [{ start: 0, title: "Intro" }];
+      fallback = true;
     } else {
       const messages = buildMessages(buildTranscript(words), outDur, language);
       try {
+        const elapsed = new Map<string, number>();
         const r = await withProvider(
           ctx.providers,
           "llm",
-          async (p) => parseChapters(await chatComplete(p, messages, { json: true }), outDur),
+          async (p) => {
+            const t0 = Date.now();
+            try {
+              return parseChapters(await chatComplete(p, messages, { json: true, timeoutMs: LLM_TIMEOUT_MS }), outDur);
+            } finally {
+              elapsed.set(p.id, Date.now() - t0);
+            }
+          },
           { prefer, private: true },
         );
+        for (const a of r.attempts) ctx.log(`chapters: ${a.id} failed: ${a.error} (${elapsed.get(a.id) ?? 0} ms)`);
         list = postProcess(r.result, words, outDur);
         provider = r.provider;
         providerId = r.provider.id;
