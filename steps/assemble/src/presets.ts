@@ -31,3 +31,8 @@ export function chooseRenderer(o: { preset: string; outDurationSec: number; burn
   }
   return SOCIAL.has(o.preset) && o.outDurationSec <= HYPERFRAMES_MAX_SEC ? "hyperframes" : "ass";
 }
+
+/** False for a vertical social preset whose cut runs past 180 s (Shorts/Reels/TikTok length limits). */
+export function socialDurationOk(preset: string, outDurationSec: number): boolean {
+  return !(SOCIAL.has(preset) && outDurationSec > HYPERFRAMES_MAX_SEC);
+}

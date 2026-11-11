@@ -6,7 +6,7 @@ import { after, before, test } from "node:test";
 import { checkAssSize, resolveAssembleFfmpeg } from "../src/assemble.ts";
 import { escapeFilterPath, fitFilter, frameCounts, presetFilter } from "../src/filters.ts";
 import { buildComposition, hyperframesCommand } from "../src/hyperframes.ts";
-import { chooseRenderer, presetSize } from "../src/presets.ts";
+import { chooseRenderer, presetSize, socialDurationOk } from "../src/presets.ts";
 
 let dir: string;
 before(async () => {
@@ -111,4 +111,12 @@ test("checkAssSize: same aspect passes, a different one names the fix", async ()
 
 test("fitFilter scales down into the preset box, never up, even dimensions", () => {
   assert.equal(fitFilter(1920, 1080), "scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease:force_divisible_by=2");
+});
+
+test("socialDurationOk: vertical social presets over 180 s are flagged", () => {
+  assert.equal(socialDurationOk("shorts", 180), true);
+  assert.equal(socialDurationOk("reels", 181), false);
+  assert.equal(socialDurationOk("tiktok", 600), false);
+  assert.equal(socialDurationOk("youtube", 600), true);
+  assert.equal(socialDurationOk("source", 600), true);
 });

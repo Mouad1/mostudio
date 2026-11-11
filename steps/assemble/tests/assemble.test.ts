@@ -207,6 +207,8 @@ test("shorts preset ≤ 180 s defaults to hyperframes captions", async () => {
   assert.equal(r.status, "pass", JSON.stringify(r));
   const m = r.metrics as Record<string, number | string | boolean>;
   assert.equal(m.captionsRenderer, "hyperframes");
+  assert.equal(m.socialDurationOk, true);
+  assert.ok(typeof m.endDriftMs === "number" && m.endDriftMs <= 80, String(m.endDriftMs));
   assert.equal(m.captionsBurned, true);
   assert.equal(m.width, 1080);
   assert.equal(m.height, 1920);
@@ -359,4 +361,15 @@ test("4K-class source: CFR intermediate is scaled into the preset box (no source
   assert.ok(logs.some((l) => /CFR intermediate \(2 s source, fit 1920x1080\)/.test(l)), logs.join("\n"));
   assert.equal(r.metrics.width, 1920);
   assert.equal(r.metrics.height, 1080);
+});
+
+test("audio ending early fails the endDriftMs gate", async () => {
+  const dir = await project("end-drift");
+  const out = await seed(dir, [{ start: 0.5, end: 3.5 }]);
+  // mix.wav 0.5 s shorter than the cut: the video runs on after the audio stops
+  ff("-f", "lavfi", "-i", `sine=f=220:d=${out - 0.5}:sample_rate=48000`, "-ac", "2", "-c:a", "pcm_s16le", join(dir, "audio", "mix.wav"));
+  const r = await run(dir, { burnCaptions: false });
+  assert.equal(r.status, "fail", JSON.stringify(r));
+  assert.ok((r.metrics.endDriftMs as number) > 400, String(r.metrics.endDriftMs));
+  assert.ok(r.verdicts.some((v) => v.metric === "endDriftMs" && !v.ok));
 });

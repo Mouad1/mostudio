@@ -7,7 +7,7 @@ import { batchGraph, escapeFilterPath, fitFilter, frameCounts, presetFilter } fr
 import type { Segment } from "./filters.ts";
 import { renderCaptions } from "./hyperframes.ts";
 import type { Cue } from "./hyperframes.ts";
-import { chooseRenderer, presetSize } from "./presets.ts";
+import { chooseRenderer, presetSize, socialDurationOk } from "./presets.ts";
 
 const BATCH = 60;
 /** Files assemble writes into scenes/captions; anything else there is reported before the folder is regenerated. */
@@ -106,7 +106,7 @@ async function foreignFiles(dir: string): Promise<string[]> {
   return out.sort();
 }
 
-type Final = { durationSec: number; width: number; height: number; fps: number; avOffsetMs: number };
+type Final = { durationSec: number; width: number; height: number; fps: number; avOffsetMs: number; endDriftMs: number };
 
 /** Duration, size, frame rate and the first-video vs first-audio pts offset of the final file. */
 async function probeFinal(ffprobe: string, file: string): Promise<Final> {
@@ -125,7 +125,20 @@ async function probeFinal(ffprobe: string, file: string): Promise<Final> {
     return Math.min(...times);
   };
   const [v, a] = [await first("v:0"), await first("a:0")];
+  // stream ends (start + duration): picture and sound must stop together
+  const ends = JSON.parse(
+    await runBin(ffprobe, ["-v", "error", "-show_entries", "stream=codec_type,start_time,duration", "-of", "json", file]),
+  ) as { streams?: { codec_type?: string; start_time?: string; duration?: string }[] };
+  const end = (type: string): number => {
+    const s = ends.streams?.find((x) => x.codec_type === type);
+    const v0 = Number(s?.start_time ?? 0);
+    const d = Number(s?.duration);
+    if (!Number.isFinite(d)) throw new Error(`${file}: no ${type} stream duration`);
+    return (Number.isFinite(v0) ? v0 : 0) + d;
+  };
+  const endDriftMs = round(Math.abs(end("video") - end("audio")) * 1000, 1);
   return {
+    endDriftMs,
     durationSec: Number(j.format.duration),
     width: s.width,
     height: s.height,
@@ -160,6 +173,9 @@ export const assemble: StepModule = {
       burn,
       param: typeof p.captionsRenderer === "string" ? p.captionsRenderer : undefined,
     });
+    if (!socialDurationOk(size.name, outDur)) {
+      ctx.log(`assemble: warning: ${size.name} cut is ${round(outDur, 1)} s, over the 180 s limit for ${size.name}; trim it or use --param preset=youtube`);
+    }
     if (renderer === "ass") await checkAssSize(join(ctx.projectDir, "captions", "captions.ass"), size.width, size.height);
     const needs = renderer === "ass" ? [...NEEDS, "ass"] : NEEDS;
     let ffmpeg: string;
@@ -285,6 +301,8 @@ export const assemble: StepModule = {
         durationSec: round(f.durationSec, 3),
         durationDeltaSec: round(Math.abs(f.durationSec - edl.outDurationSec), 3),
         avOffsetMs: f.avOffsetMs,
+        endDriftMs: f.endDriftMs,
+        socialDurationOk: socialDurationOk(size.name, outDur),
         width: f.width,
         height: f.height,
         fps: f.fps,
