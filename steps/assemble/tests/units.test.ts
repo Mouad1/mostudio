@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { resolveAssembleFfmpeg } from "../src/assemble.ts";
+import { checkAssSize, resolveAssembleFfmpeg } from "../src/assemble.ts";
 import { escapeFilterPath, frameCounts, presetFilter } from "../src/filters.ts";
 import { buildComposition, hyperframesCommand } from "../src/hyperframes.ts";
 import { chooseRenderer, presetSize } from "../src/presets.ts";
@@ -92,4 +92,19 @@ test("hyperframes composition has one captions track and no external URLs", asyn
 test("hyperframes command: env override split on spaces, else pinned npx", () => {
   assert.deepEqual(hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "node /x/fake.ts" }), ["node", "/x/fake.ts"]);
   assert.deepEqual(hyperframesCommand({}), ["npx", "--yes", "hyperframes@0.9.26"]);
+  assert.deepEqual(hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: '["/path with space/hf", "--x"]' }), ["/path with space/hf", "--x"]);
+  assert.throws(() => hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "[nope" }), /not a JSON array/);
+  assert.throws(() => hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "[]" }), /non-empty JSON array of strings/);
+});
+
+test("checkAssSize: same aspect passes, a different one names the fix", async () => {
+  const ass = (x: number, y: number) => `[Script Info]\nPlayResX: ${x}\nPlayResY: ${y}\n`;
+  const f = join(dir, "c.ass");
+  await writeFile(f, ass(1080, 1920));
+  await checkAssSize(f, 1080, 1920);
+  await writeFile(f, ass(640, 360));
+  await checkAssSize(f, 1920, 1080);
+  await assert.rejects(checkAssSize(f, 1080, 1920), /^Error: captions\.ass is 640x360 but output is 1080x1920: re-run captions with --param width=1080 --param height=1920$/);
+  await writeFile(f, "[Script Info]\n");
+  await checkAssSize(f, 1080, 1920);
 });

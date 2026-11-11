@@ -33,16 +33,15 @@ export function frameCounts(keeps: Range[], fps: number): number[] {
 export type Segment = { start: number; end: number; frames: number };
 
 /**
- * Video-only filter graph for one batch. Input 0 is first resampled to CFR (`fps`), so a variable-frame-rate
- * source has a frame at every grid time. Each segment (times relative to the batch's input seek) keeps the grid
- * frames nearest its start and end, is padded by cloning its last frame and cut to exactly `frames` frames, then
- * all are concatenated to [out].
+ * Video-only filter graph for one batch of the constant-frame-rate intermediate (times relative to the batch's
+ * input seek). Each segment keeps the grid frames nearest its start and end, is padded by cloning its last frame
+ * and cut to exactly `frames` frames, then all are concatenated to [out].
  */
 export function batchGraph(segments: Segment[], fps: number): string {
   const n = segments.length;
   const half = 0.5 / fps;
   const tags = segments.map((_, i) => `[s${i}]`).join("");
-  const parts = [n > 1 ? `[0:v]fps=${fps},split=${n}${tags}` : `[0:v]fps=${fps}[s0]`];
+  const parts = [n > 1 ? `[0:v]split=${n}${tags}` : "[0:v]null[s0]"];
   segments.forEach((s, i) => {
     const a = Math.max(0, s.start - half);
     const b = Math.max(s.end - half, a + 2 * half);

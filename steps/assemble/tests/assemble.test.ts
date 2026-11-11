@@ -19,10 +19,12 @@ const registry: ProviderRegistry = {
 };
 
 let root: string;
-let ffmpeg: string;
+const assFfmpeg = await resolveFfmpeg(process.env, ["ass"]).catch(() => undefined);
+const ffmpeg = assFfmpeg ?? (process.env.FFMPEG || "ffmpeg");
+/** Tests that burn with libass skip (with the reason) when no ffmpeg candidate has the `ass` filter. */
+const needsAss = { skip: assFfmpeg ? false : "no ffmpeg build with the ass filter (libass): brew install ffmpeg-full" };
 before(async () => {
   root = await mkdtemp(join(tmpdir(), "mostudio-assemble-"));
-  ffmpeg = await resolveFfmpeg(process.env, ["ass"]).catch(() => process.env.FFMPEG || "ffmpeg");
 });
 after(async () => {
   await rm(root, { recursive: true, force: true });
@@ -38,7 +40,7 @@ const probe = (file: string, entries: string, stream = "v:0"): string =>
 type Keep = { start: number; end: number };
 
 /** Seed a project: source video (lavfi testsrc2 + tone), edl, mix.wav of the cut length, captions files. */
-async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number; h?: number; srcSec?: number } = {}): Promise<number> {
+async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number; h?: number; srcSec?: number; playRes?: [number, number] } = {}): Promise<number> {
   const w = opts.w ?? 320;
   const h = opts.h ?? 240;
   const srcSec = opts.srcSec ?? 10;
@@ -58,7 +60,7 @@ async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number;
   await writeJsonAtomic(join(dir, "cut", "edl.json"), { source: file, fadeSec: 0.01, keep, removed: [], outDurationSec: out });
   ff("-f", "lavfi", "-i", `sine=f=220:d=${out}:sample_rate=48000`, "-ac", "2", "-c:a", "pcm_s16le", join(dir, "audio", "mix.wav"));
   const ass = [
-    "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "",
+    "[Script Info]", "ScriptType: v4.00+", `PlayResX: ${opts.playRes?.[0] ?? 1080}`, `PlayResY: ${opts.playRes?.[1] ?? 1920}`, "",
     "[V4+ Styles]",
     "Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Outline,Shadow,Alignment,MarginL,MarginR,MarginV",
     "Style: Default,Arial,90,&H00FFFFFF,&H00000000,&H00000000,1,6,0,2,60,60,340", "",
@@ -79,15 +81,15 @@ async function project(name: string): Promise<string> {
   return dir;
 }
 
-const run = (dir: string, params: Record<string, unknown> = {}, env: Record<string, string | undefined> = process.env) =>
-  runStep(dir, assemble, { params, config, providers: registry, force: true, env });
+const run = (dir: string, params: Record<string, unknown> = {}, env: Record<string, string | undefined> = process.env, log?: (m: string) => void) =>
+  runStep(dir, assemble, { params, config, providers: registry, force: true, env, ...(log ? { log } : {}) });
 
 /** Bytes of a gray crop of the frame at `t`. */
 function grayCrop(file: string, t: number, crop: string): Buffer {
   return execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-ss", String(t), "-i", file, "-frames:v", "1", "-vf", `crop=${crop},format=gray`, "-f", "rawvideo", "-"]);
 }
 
-test("assembles a 1080x1920 shorts render with burned captions", async () => {
+test("assembles a 1080x1920 shorts render with burned captions", needsAss, async () => {
   const dir = await project("shorts");
   const out = await seed(dir, [{ start: 0.5, end: 2.5 }, { start: 4, end: 6 }]);
   const r = await run(dir, { preset: "shorts", captionsRenderer: "ass" });
@@ -153,10 +155,10 @@ test("VFR source does not drift: avOffsetMs ≤ 40", async () => {
   assert.ok(Math.abs(frames - Math.round(out * 30)) <= 1, `${frames} frames for ${out}s (CFR)`);
 });
 
-test("project path with spaces and accents works with ass=", async () => {
+test("project path with spaces and accents works with ass=", needsAss, async () => {
   const dir = join(root, "Vidéos à monter", "l'essai");
   await mkdir(dir, { recursive: true });
-  await seed(dir, [{ start: 0, end: 2 }]);
+  await seed(dir, [{ start: 0, end: 2 }], { playRes: [1920, 1080] });
   const r = await run(dir, { preset: "youtube" });
   assert.equal(r.status, "pass", JSON.stringify(r));
   const m = r.metrics as Record<string, number | string | boolean>;
@@ -192,7 +194,12 @@ test("shorts preset ≤ 180 s defaults to hyperframes captions", async () => {
   const dir = await project("hf");
   const out = await seed(dir, [{ start: 0.5, end: 2.5 }, { start: 4, end: 5 }]);
   const { bin, log } = await fakeHyperframes();
-  const r = await run(dir, { preset: "shorts" }, { ...process.env, MOSTUDIO_HYPERFRAMES_BIN: bin });
+  await mkdir(join(dir, "scenes", "captions", "assets"), { recursive: true });
+  await writeFile(join(dir, "scenes", "captions", "assets", "logo.png"), "x");
+  await writeFile(join(dir, "scenes", "captions", "index.html"), "old");
+  const logs: string[] = [];
+  const r = await run(dir, { preset: "shorts" }, { ...process.env, MOSTUDIO_HYPERFRAMES_BIN: bin }, (m) => logs.push(m));
+  assert.ok(logs.some((l) => /warning: .*assets\/logo\.png/.test(l) && !/index\.html/.test(l)), logs.join("\n"));
   assert.equal(r.status, "pass", JSON.stringify(r));
   const m = r.metrics as Record<string, number | string | boolean>;
   assert.equal(m.captionsRenderer, "hyperframes");
@@ -260,4 +267,49 @@ test("cuts keep picture and sound in sync (flash frames line up with beeps)", as
   assert.ok(flashes.length >= 6, `flashes ${flashes}`);
   assert.equal(flashes.length, beeps.length, `flashes ${flashes} vs beeps ${beeps}`);
   flashes.forEach((f, i) => assert.ok(Math.abs(f - (beeps[i] ?? -1)) <= 0.04, `flash ${f.toFixed(3)} vs beep ${beeps[i]?.toFixed(3)}`));
+});
+
+test("captions.ass laid out for another aspect fails before rendering", async () => {
+  const dir = await project("playres");
+  await seed(dir, [{ start: 0, end: 2 }], { playRes: [640, 360] });
+  const r = await run(dir, { preset: "shorts", captionsRenderer: "ass" });
+  assert.equal(r.status, "fail");
+  assert.match(String(r.error), /captions\.ass is 640x360 but output is 1080x1920: re-run captions with --param width=1080 --param height=1920/);
+  assert.equal(existsSync(join(dir, "renders", "final.mp4")), false);
+});
+
+/** Mean RGB of the output frame at `t`. */
+function rgbAt(file: string, t: number): [number, number, number] {
+  const b = execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", "scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"]);
+  return [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0];
+}
+
+test("VFR gap before a batch keeps content in sync (held frame, flash at the right time)", async () => {
+  const dir = await project("vfr-gap");
+  // red 0..1 s (30 frames), then nothing until 5 s (the last red frame is held), then blue with a one-frame
+  // white flash at source 6.5 s; a batch starting at 2 s must show red, not jump ahead to blue
+  const raw = join(root, "vfr-gap.mp4");
+  ff(
+    "-f", "lavfi", "-i", "color=c=red:size=160x120:rate=30:duration=1",
+    "-f", "lavfi", "-i", "color=c=blue:size=160x120:rate=30:duration=3",
+    "-f", "lavfi", "-i", "sine=f=440:d=8:sample_rate=48000",
+    "-filter_complex",
+    "[1:v]drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable='between(n\\,45\\,45)'[b];[0:v][b]concat=n=2:v=1:a=0,setpts='if(gte(T\\,0.99)\\,PTS+4/TB\\,PTS)'[v]",
+    "-map", "[v]", "-map", "2:a", "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", raw,
+  );
+  assert.equal(Number(probe(raw, "stream=nb_frames")), 120, "fixture frame count");
+  await seed(dir, [{ start: 2, end: 3 }, { start: 6, end: 7 }], { src: raw, w: 160, h: 120, srcSec: 8 });
+  const r = await run(dir, { burnCaptions: false }, { ...process.env, MOSTUDIO_ASSEMBLE_BATCH: "1" });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal((r.metrics as Record<string, number>).batches, 2);
+  const final = join(dir, "renders", "final.mp4");
+  const [r0, , b0] = rgbAt(final, 0.5);
+  assert.ok(r0 > 150 && b0 < 100, `held red frame expected at 0.5 s, got rgb ${r0},${b0}`);
+  const [r1, , b1] = rgbAt(final, 1.2);
+  assert.ok(b1 > 150 && r1 < 100, `blue expected at 1.2 s, got rgb ${r1},${b1}`);
+  // the flash (source 6.5 s) must land at output 1.5 s +- 1 frame
+  const luma = execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", final, "-vf", "scale=1:1:flags=area,format=gray", "-f", "rawvideo", "-"]);
+  const flash = [...luma].flatMap((v, i) => (v > 200 ? [i / 30] : []));
+  assert.equal(flash.length, 1, `flash frames at ${flash}`);
+  assert.ok(Math.abs((flash[0] ?? 0) - 1.5) <= 1 / 30 + 1e-6, `flash at ${flash[0]}`);
 });

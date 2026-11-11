@@ -1,5 +1,5 @@
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { join, sep } from "node:path";
 import { pickH264Encoder, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
@@ -10,6 +10,8 @@ import type { Cue } from "./hyperframes.ts";
 import { chooseRenderer, presetSize } from "./presets.ts";
 
 const BATCH = 60;
+/** Files assemble writes into scenes/captions; anything else there is reported before the folder is regenerated. */
+const SCENE_FILES = new Set(["index.html", "hyperframes.json", "compositions/captions.html", "assets/cut.mp4"]);
 const BASE = ["-hide_banner", "-loglevel", "error", "-y"];
 const FF_TIMEOUT_MS = 3_600_000;
 const NEEDS = ["trim", "setpts", "split", "fps", "tpad", "concat", "scale", "pad", "setsar"];
@@ -49,6 +51,35 @@ async function probeStarts(ffprobe: string, file: string): Promise<Probe> {
   const j = JSON.parse(out) as { format?: { start_time?: string }; streams?: { codec_type?: string; start_time?: string }[] };
   const num = (v: string | undefined): number | undefined => (v !== undefined && Number.isFinite(Number(v)) ? Number(v) : undefined);
   return { formatStart: num(j.format?.start_time) ?? 0, audioStart: num(j.streams?.find((s) => s.codec_type === "audio")?.start_time) };
+}
+
+/** Fail early when captions.ass was laid out for another aspect ratio than the output (libass would stretch it). */
+export async function checkAssSize(assPath: string, width: number, height: number): Promise<void> {
+  const text = await readFile(assPath, "utf8");
+  const x = Number(/^PlayResX:\s*(\d+)/m.exec(text)?.[1]);
+  const y = Number(/^PlayResY:\s*(\d+)/m.exec(text)?.[1]);
+  if (!(x > 0 && y > 0)) return;
+  if (Math.abs(x / y - width / height) / (width / height) > 0.01) {
+    throw new Error(`captions.ass is ${x}x${y} but output is ${width}x${height}: re-run captions with --param width=${width} --param height=${height}`);
+  }
+}
+
+/** Files under `dir` that assemble does not generate (HyperFrames' own .hyperframes/ is ignored). */
+async function foreignFiles(dir: string): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(dir, { recursive: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const e of entries) {
+    const rel = e.split(sep).join("/");
+    if (rel === ".hyperframes" || rel.startsWith(".hyperframes/") || SCENE_FILES.has(rel)) continue;
+    if ([...SCENE_FILES].some((f) => f.startsWith(`${rel}/`))) continue; // a folder we write into
+    out.push(rel);
+  }
+  return out.sort();
 }
 
 type Final = { durationSec: number; width: number; height: number; fps: number; avOffsetMs: number };
@@ -108,6 +139,7 @@ export const assemble: StepModule = {
       burn,
       param: typeof p.captionsRenderer === "string" ? p.captionsRenderer : undefined,
     });
+    if (renderer === "ass") await checkAssSize(join(ctx.projectDir, "captions", "captions.ass"), size.width, size.height);
     const ffmpeg = await resolveAssembleFfmpeg(ctx.env, renderer === "ass" ? [...NEEDS, "ass"] : NEEDS);
     const encoder = await pickH264Encoder(ffmpeg, ctx.env);
     const ffprobe = resolveBin("ffprobe", ctx.env);
@@ -115,7 +147,7 @@ export const assemble: StepModule = {
     const mixWav = join(ctx.projectDir, "audio", "mix.wav");
 
     // keep times are on the audio clock (mix re-zeroes the audio stream); video pts are re-zeroed to the
-    // format start, so shift by the audio stream's offset into the file
+    // format start, so the CFR intermediate is shifted by the audio stream's offset into the file
     const starts = await probeStarts(ffprobe, source);
     const aOff = Math.max(0, (starts.audioStart ?? starts.formatStart) - starts.formatStart);
 
@@ -124,23 +156,34 @@ export const assemble: StepModule = {
     await mkdir(cache, { recursive: true });
     await mkdir(join(ctx.projectDir, "renders"), { recursive: true });
     try {
-      // 1. video-only cut in batches of <= 60 keeps, CFR, source resolution
+      // 1. one constant-frame-rate, video-only intermediate of the source on the audio clock: every grid time has
+      // a frame (VFR gaps are filled with the held frame), so batches can input-seek and count frames safely
+      const cfrFile = join(cache, "cfr.mp4");
+      const lastEnd = Math.max(...keeps.map((k) => k.end));
+      await runBin(
+        ffmpeg,
+        [...BASE, "-i", source, "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", `setpts=PTS-${t(aOff)}/TB,fps=${fps}:start_time=0`, ...encodeArgs(encoder, false), "-t", t(lastEnd + 1), cfrFile],
+        FF_TIMEOUT_MS,
+      );
+
+      // 2. video-only cut in batches of <= 60 keeps, source resolution
+      const batchSize = Number(ctx.env.MOSTUDIO_ASSEMBLE_BATCH) > 0 ? Math.floor(Number(ctx.env.MOSTUDIO_ASSEMBLE_BATCH)) : BATCH;
       const frames = frameCounts(keeps, fps);
       const batches: string[] = [];
-      for (let i = 0; i < keeps.length; i += BATCH) {
-        const slice = keeps.slice(i, i + BATCH);
-        const counts = frames.slice(i, i + BATCH);
+      for (let i = 0; i < keeps.length; i += batchSize) {
+        const slice = keeps.slice(i, i + batchSize);
+        const counts = frames.slice(i, i + batchSize);
         const first = slice[0];
         if (!first) continue;
-        const seek = Math.max(0, first.start + aOff - SEEK_LEAD);
+        const seek = Math.max(0, first.start - SEEK_LEAD);
         const segments: Segment[] = slice
-          .map((k, j) => ({ start: k.start + aOff - seek, end: k.end + aOff - seek, frames: counts[j] ?? 0 }))
+          .map((k, j) => ({ start: k.start - seek, end: k.end - seek, frames: counts[j] ?? 0 }))
           .filter((s) => s.frames > 0);
         if (segments.length === 0) continue;
         const file = join(cache, `batch-${String(batches.length).padStart(3, "0")}.mp4`);
         await runBin(
           ffmpeg,
-          [...BASE, "-ss", t(seek), "-i", source, "-filter_complex", batchGraph(segments, fps), "-map", "[out]", "-an", ...encodeArgs(encoder, false), file],
+          [...BASE, "-ss", t(seek), "-i", cfrFile, "-filter_complex", batchGraph(segments, fps), "-map", "[out]", "-an", ...encodeArgs(encoder, false), file],
           FF_TIMEOUT_MS,
         );
         batches.push(file);
@@ -151,7 +194,7 @@ export const assemble: StepModule = {
       await writeFile(list, `${batches.map(concatLine).join("\n")}\n`);
       await runBin(ffmpeg, [...BASE, "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-an", cut], FF_TIMEOUT_MS);
 
-      // 2. final pass: preset size, captions, mixed audio
+      // 3. final pass: preset size, captions, mixed audio
       const finalPath = join(ctx.projectDir, "renders", "final.mp4");
       const preset = presetFilter(size.width, size.height, fps);
       const cfr = ["-r", String(fps), "-fps_mode", "cfr"];
@@ -163,9 +206,12 @@ export const assemble: StepModule = {
         const cues = (await readJson<Cue[]>(join(ctx.projectDir, "captions", "cues.json"))) ?? [];
         if (!Array.isArray(cues)) throw new Error("captions/cues.json is not an array");
         const captioned = join(cache, "captioned.mp4");
+        const sceneDir = join(ctx.projectDir, "scenes", "captions");
+        const foreign = await foreignFiles(sceneDir);
+        if (foreign.length) ctx.log(`assemble: warning: regenerating scenes/captions removes files assemble did not write: ${foreign.join(", ")}`);
         await renderCaptions({
           env: ctx.env,
-          sceneDir: join(ctx.projectDir, "scenes", "captions"),
+          sceneDir,
           presetCut,
           cues,
           width: size.width,

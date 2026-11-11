@@ -14,10 +14,26 @@ const r3 = (n: number): number => Math.round(n * 1000) / 1000;
 const esc = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-/** The HyperFrames CLI: MOSTUDIO_HYPERFRAMES_BIN split on spaces, else the pinned npx package. */
+/**
+ * The HyperFrames CLI: MOSTUDIO_HYPERFRAMES_BIN as a JSON array of strings (paths with spaces) or split on
+ * whitespace, else the pinned npx package.
+ */
 export function hyperframesCommand(env: Record<string, string | undefined>): string[] {
   const custom = env.MOSTUDIO_HYPERFRAMES_BIN?.trim();
-  return custom ? custom.split(/\s+/) : [...PINNED];
+  if (!custom) return [...PINNED];
+  if (custom.startsWith("[")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(custom);
+    } catch {
+      throw new Error("MOSTUDIO_HYPERFRAMES_BIN starts with [ but is not a JSON array");
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((a) => typeof a === "string" && a)) {
+      throw new Error("MOSTUDIO_HYPERFRAMES_BIN must be a non-empty JSON array of strings");
+    }
+    return parsed;
+  }
+  return custom.split(/\s+/);
 }
 
 /** One caption group per cue, clamped to the composition; words become timed spans for the highlight. */
