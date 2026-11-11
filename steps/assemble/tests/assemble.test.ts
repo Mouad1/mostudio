@@ -373,3 +373,16 @@ test("audio ending early fails the endDriftMs gate", async () => {
   assert.ok((r.metrics.endDriftMs as number) > 400, String(r.metrics.endDriftMs));
   assert.ok(r.verdicts.some((v) => v.metric === "endDriftMs" && !v.ok));
 });
+
+test("320 keep ranges (6 batches) stay frame-accurate", async () => {
+  const dir = await project("k320");
+  const keep = Array.from({ length: 320 }, (_, i) => ({ start: 0.2 + i * 0.08, end: 0.2 + i * 0.08 + 0.05 }));
+  const out = await seed(dir, keep, { w: 160, h: 120, srcSec: 26 });
+  const r = await run(dir, { burnCaptions: false });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  const m = r.metrics as Record<string, number>;
+  assert.equal(m.batches, 6);
+  assert.ok(Math.abs(m.durationSec - out) <= 0.05, `${m.durationSec} vs ${out}`);
+  const frames = Number(probe(join(dir, "renders", "final.mp4"), "stream=nb_frames"));
+  assert.ok(Math.abs(frames - Math.round(out * 30)) <= 1, `${frames} frames for ${out}s`);
+});

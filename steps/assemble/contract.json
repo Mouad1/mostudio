@@ -1,6 +1,6 @@
 {
   "name": "assemble",
-  "version": "5",
+  "version": "6",
   "inputs": [
     "media/ingest.json",
     "cut/edl.json",

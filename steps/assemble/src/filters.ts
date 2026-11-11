@@ -43,7 +43,7 @@ export type Segment = { start: number; end: number; frames: number };
 /**
  * Video-only filter graph for one batch of the constant-frame-rate intermediate (times relative to the batch's
  * input seek). Each segment keeps the grid frames nearest its start and end, is padded by cloning its last frame
- * and cut to exactly `frames` frames, then all are concatenated to [out].
+ * and cut to exactly `frames` frames, then all are concatenated and renumbered on the grid to [out].
  */
 export function batchGraph(segments: Segment[], fps: number): string {
   const n = segments.length;
@@ -59,6 +59,9 @@ export function batchGraph(segments: Segment[], fps: number): string {
         `tpad=stop_mode=clone:stop_duration=${pad},trim=end_frame=${s.frames},setpts=N/(${fps}*TB)[v${i}]`,
     );
   });
-  parts.push(`${segments.map((_, i) => `[v${i}]`).join("")}concat=n=${n}:v=1:a=0[out]`);
+  // concat treats a one-frame segment as zero-length, so the next segment's first frame repeats its timestamp and
+  // the muxer drops it (a cut of 1-2 frame keeps lost a third of its frames); renumbering after concat keeps every frame
+  parts.push(`${segments.map((_, i) => `[v${i}]`).join("")}concat=n=${n}:v=1:a=0[c]`);
+  parts.push(`[c]setpts=N/(${fps}*TB)[out]`);
   return parts.join(";");
 }

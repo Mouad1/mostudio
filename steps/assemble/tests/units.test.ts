@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { checkAssSize, resolveAssembleFfmpeg } from "../src/assemble.ts";
-import { escapeFilterPath, fitFilter, frameCounts, presetFilter } from "../src/filters.ts";
+import { batchGraph, escapeFilterPath, fitFilter, frameCounts, presetFilter } from "../src/filters.ts";
 import { buildComposition, hyperframesCommand } from "../src/hyperframes.ts";
 import { chooseRenderer, presetSize, socialDurationOk } from "../src/presets.ts";
 
@@ -119,4 +119,9 @@ test("socialDurationOk: vertical social presets over 180 s are flagged", () => {
   assert.equal(socialDurationOk("tiktok", 600), false);
   assert.equal(socialDurationOk("youtube", 600), true);
   assert.equal(socialDurationOk("source", 600), true);
+});
+
+test("batchGraph renumbers frames after concat (one-frame segments keep their frames)", () => {
+  const g = batchGraph([{ start: 1, end: 1.05, frames: 2 }, { start: 1.08, end: 1.11, frames: 1 }], 30);
+  assert.match(g, /concat=n=2:v=1:a=0\[c\];\[c\]setpts=N\/\(30\*TB\)\[out\]$/);
 });
