@@ -1,0 +1,28 @@
+{
+  "name": "captions",
+  "version": "1",
+  "inputs": [
+    "transcript/words.json",
+    "cut/edl.json",
+    "edits/*"
+  ],
+  "outputs": [
+    "captions/cues.json",
+    "captions/captions.srt",
+    "captions/captions.ass",
+    "captions/captions.txt"
+  ],
+  "params": {
+    "style": "string?",
+    "width": "number?",
+    "height": "number?",
+    "font": "string?"
+  },
+  "private": true,
+  "gate": [
+    { "metric": "maxCharsPerLine", "op": "<=", "value": 42, "level": "fail" },
+    { "metric": "maxReadingSpeed", "op": "<=", "value": 17, "level": "warn" },
+    { "metric": "arabicScriptPct", "op": "==", "value": 0, "level": "warn" },
+    { "metric": "cueCount", "op": ">", "value": 0, "level": "warn" }
+  ]
+}
