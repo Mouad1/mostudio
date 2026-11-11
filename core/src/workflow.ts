@@ -92,6 +92,19 @@ async function readParams(projectDir: string, legacyOwner: string): Promise<Work
   return raw as WorkflowParams;
 }
 
+/** Approval steps of `wf` whose latest pass/warn result is not approved (for status displays). */
+export async function pendingApprovals(projectDir: string, wf: Workflow): Promise<string[]> {
+  const ledger = await readLedger(projectDir);
+  const approvals = await readApprovals(projectDir);
+  return wf.steps
+    .filter((s) => s.approve)
+    .map((s) => s.step)
+    .filter((step) => {
+      const r = latest(ledger, step);
+      return r !== undefined && r.status !== "fail" && r.inputsHash !== "" && approvals[step] !== r.inputsHash;
+    });
+}
+
 /** Record the step's latest pass/warn inputsHash as approved. */
 export async function approveStep(projectDir: string, step: string): Promise<void> {
   const r = latest(await readLedger(projectDir), step);

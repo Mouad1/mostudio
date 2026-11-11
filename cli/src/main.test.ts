@@ -471,3 +471,22 @@ test("run refuses a second workflow on a project (exit 64) unless --switch-workf
   assert.equal(await run(["run", "wf-b", "--project", dir, "--switch-workflow"]), 0);
   assert.match(out(), /^wf-b: done$/m);
 });
+
+test("status marks an unapproved approval step of the project's workflow", async () => {
+  writeWf("wf-st", { name: "wf-st", steps: [{ step: "fake", params: { n: 1 } }, { step: "captions", approve: true }] });
+  const dir = await newProject("status-approval");
+  reset();
+  assert.equal(await run(["run", "wf-st", "--project", dir]), 3);
+  reset();
+  assert.equal(await run(["status", "--project", dir]), 0);
+  assert.match(out(), /^captions .*awaiting approval/m);
+  assert.doesNotMatch(out(), /^fake .*awaiting approval/m);
+  reset();
+  assert.equal(await run(["status", "--project", dir, "--json"]), 0);
+  assert.equal(JSON.parse(out()).captions.awaitingApproval, true);
+  reset();
+  assert.equal(await run(["approve", "captions", "--project", dir]), 0);
+  reset();
+  assert.equal(await run(["status", "--project", dir]), 0);
+  assert.doesNotMatch(out(), /awaiting approval/);
+});

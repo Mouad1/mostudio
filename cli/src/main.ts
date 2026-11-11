@@ -11,6 +11,8 @@ import {
   readJson,
   readLedger,
   parseWorkflow,
+  pendingApprovals,
+  readProjectWorkflow,
   runStep,
   runWorkflow,
   WorkflowMismatchError,
@@ -262,19 +264,38 @@ async function cmdApprove(p: Parsed, io: Io): Promise<number> {
   return 0;
 }
 
-async function cmdStatus(p: Parsed, io: Io): Promise<number> {
+/** Approval steps of the project's workflow (steps/workflow.json) still waiting for `mostudio approve`. */
+async function awaitingApproval(projectDir: string, root: string, steps: Record<string, StepModule>): Promise<Set<string>> {
+  const name = await readProjectWorkflow(projectDir);
+  if (!name) return new Set();
+  try {
+    const wf = parseWorkflow(await readJson<unknown>(join(root, "workflows", `${name}.json`)), Object.keys(steps));
+    return new Set(await pendingApprovals(projectDir, wf));
+  } catch {
+    return new Set(); // workflow file gone or invalid: status still lists results
+  }
+}
+
+async function cmdStatus(p: Parsed, io: Io, steps: Record<string, StepModule>): Promise<number> {
   const projectDir = await projectDirOf(p, io);
   await assertProjectDir(projectDir);
   const ledger = await readLedger(projectDir);
   const names = Object.keys(ledger.steps).sort();
-  const results: Record<string, StepResult> = {};
+  const waiting = await awaitingApproval(projectDir, rootOf(io), steps);
+  const results: Record<string, StepResult & { awaitingApproval?: true }> = {};
   for (const n of names) {
     const r = latest(ledger, n);
-    if (r) results[n] = r;
+    if (r) results[n] = waiting.has(n) ? { ...r, awaitingApproval: true } : r;
   }
   if (p.json) io.stdout(`${JSON.stringify(results, null, 2)}\n`);
   else if (Object.keys(results).length === 0) io.stdout("no steps yet\n");
-  else io.stdout(`${Object.values(results).map(formatResult).join("\n")}\n`);
+  else {
+    const lines = Object.values(results).map((r) => {
+      const [head, ...rest] = formatResult(r).split("\n");
+      return [`${head}${r.awaitingApproval ? `  awaiting approval (mostudio approve ${r.step} --project ${projectDir})` : ""}`, ...rest].join("\n");
+    });
+    io.stdout(`${lines.join("\n")}\n`);
+  }
   return 0;
 }
 
@@ -301,7 +322,7 @@ export async function main(
     if (command === "step") return await cmdStep(p, io, env, steps);
     if (command === "run") return await cmdRun(p, io, env, steps);
     if (command === "approve") return await cmdApprove(p, io);
-    return await cmdStatus(p, io);
+    return await cmdStatus(p, io, steps);
   } catch (err) {
     if (err instanceof WorkflowMismatchError) {
       io.stderr(`${err.message}\n`);

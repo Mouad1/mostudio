@@ -38,5 +38,5 @@ export type { Range } from "./timeline.ts";
 export { quietestPoint, rmsEnvelope } from "./audio/envelope.ts";
 export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.ts";
 export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
-export { approveStep, parseWorkflow, readProjectWorkflow, runWorkflow, WorkflowMismatchError, WorkflowParamError } from "./workflow.ts";
+export { approveStep, parseWorkflow, pendingApprovals, readProjectWorkflow, runWorkflow, WorkflowMismatchError, WorkflowParamError } from "./workflow.ts";
 export type { RunWorkflowOptions, Workflow, WorkflowResult } from "./workflow.ts";
