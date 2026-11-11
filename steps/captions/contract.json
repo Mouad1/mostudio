@@ -2,6 +2,7 @@
   "name": "captions",
   "version": "1",
   "inputs": [
+    "media/ingest.json",
     "transcript/words.json",
     "cut/edl.json",
     "edits/*"

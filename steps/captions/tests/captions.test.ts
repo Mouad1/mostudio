@@ -66,7 +66,9 @@ test("short style ≤ 3 words with karaoke tags", () => {
   const ass = buildAss(cues, "short", { width: 1080, height: 1920, font: "Arial" });
   assert.match(ass, /PlayResX: 1080/);
   assert.match(ass, /PlayResY: 1920/);
-  assert.match(ass, /Style: Default,Arial,84,&H00FFFFFF,&H0000D4FF,&H00000000/);
+  assert.match(ass, /Style: Default,Arial,84,&H0000D4FF,&H00FFFFFF,&H00000000/);
+  const long = buildAss(cues, "long", { width: 1920, height: 1080, font: "Arial" });
+  assert.match(long, /Style: Default,Arial,48,&H00FFFFFF,&H00FFFFFF,&H00000000/);
   assert.match(ass, /,6,0,2,\d+,\d+,340,1/);
 });
 
@@ -176,4 +178,16 @@ test("short style defaults to 1080x1920 without ingest size override", async () 
   assert.equal(r.status, "pass", JSON.stringify(r));
   assert.equal(r.metrics.cueCount, 2);
   assert.match(await readFile(join(dir, "captions", "captions.ass"), "utf8"), /PlayResY: 1920/);
+});
+
+test("contract lists ingest.json and changing its size re-runs the step", async () => {
+  assert.ok(captions.contract.inputs.includes("media/ingest.json"));
+  await seed(seq(["a", "b"]), [{ start: 0, end: 10 }]);
+  const a = await run();
+  const b = await run();
+  assert.equal(b.cached, true);
+  await seed(seq(["a", "b"]), [{ start: 0, end: 10 }], "", { width: 1280, height: 720 });
+  const c = await run();
+  assert.notEqual(c.inputsHash, a.inputsHash);
+  assert.equal(c.cached, false);
 });

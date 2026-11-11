@@ -1,5 +1,6 @@
 import type { CaptionStyle, Cue } from "./group.ts";
 
+// \k: text is SecondaryColour until sung, then PrimaryColour -> white before, highlight after
 export const HIGHLIGHT_ASS = "&H0000D4FF"; // #FFD400 as ASS BGR
 const WHITE = "&H00FFFFFF";
 const BLACK = "&H00000000";
@@ -45,7 +46,7 @@ export function buildAss(cues: Cue[], style: CaptionStyle, o: AssOptions): strin
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${o.font},${size},${WHITE},${style === "short" ? HIGHLIGHT_ASS : WHITE},${BLACK},${BLACK},-1,0,0,0,100,100,0,0,1,6,0,2,40,40,${marginV},1`,
+    `Style: Default,${o.font},${size},${style === "short" ? HIGHLIGHT_ASS : WHITE},${WHITE},${BLACK},${BLACK},-1,0,0,0,100,100,0,0,1,6,0,2,40,40,${marginV},1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
