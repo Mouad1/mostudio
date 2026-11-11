@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { ProviderHttpError } from "../../../core/src/index.ts";
+import { parseRetryAfter, ProviderHttpError } from "../../../core/src/index.ts";
 import type { FetchLike, PickedProvider, Word } from "../../../core/src/index.ts";
 import { buildSegments } from "./whisper-cpp.ts";
 import type { Segment } from "./whisper-cpp.ts";
@@ -36,7 +36,7 @@ export async function transcribeCloudflare(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${text.split(key).join("[redacted]").slice(0, 200)}`);
+    throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${text.split(key).join("[redacted]").slice(0, 200)}`, parseRetryAfter(res.headers));
   }
   let data: CfResponse;
   try {

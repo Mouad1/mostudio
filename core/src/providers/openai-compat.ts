@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { NonRetryableError, ProviderHttpError } from "./call.ts";
+import { NonRetryableError, parseRetryAfter, ProviderHttpError } from "./call.ts";
 import type { PickedProvider } from "./registry.ts";
 
 export type FetchLike = typeof fetch;
@@ -28,7 +28,7 @@ async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchL
     const secret = p.key?.reveal();
     if (secret) redacted = redacted.split(secret).join("[redacted]");
     const snippet = redacted.slice(0, 200);
-    throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${snippet}`);
+    throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${snippet}`, parseRetryAfter(res.headers));
   }
   try {
     return JSON.parse(text);

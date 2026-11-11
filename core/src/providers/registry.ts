@@ -62,7 +62,8 @@ export class NoProviderError extends Error {
 export type ProviderRegistry = {
   pick(capability: string, opts?: PickOptions): Promise<PickedProvider>;
   recordUse(id: string, now?: Date): Promise<void>;
-  markExhausted(id: string, now?: Date): Promise<void>;
+  /** Skip `id` until its next reset: for `capability` only when given, else for every capability. */
+  markExhausted(id: string, now?: Date, capability?: string): Promise<void>;
 };
 
 export function createRegistry(
@@ -117,8 +118,9 @@ export function createRegistry(
             }
           }
           const q = currentQuota(store, e.id, e.reset.tz, now);
-          if (q.exhaustedUntil) {
-            reasons.push({ id: e.id, reason: "exhausted", until: q.exhaustedUntil });
+          const exhaustedUntil = q.exhaustedUntil ?? q.exhaustedFor?.[capability];
+          if (exhaustedUntil) {
+            reasons.push({ id: e.id, reason: "exhausted", until: exhaustedUntil });
             continue;
           }
           if (e.limits.rpd !== undefined && (e.limits.rpd <= 0 || q.day.count >= e.limits.rpd)) {
@@ -155,12 +157,14 @@ export function createRegistry(
       });
     },
 
-    markExhausted(id, now = new Date()) {
+    markExhausted(id, now = new Date(), capability) {
       return locked(async () => {
         const e = byId(id);
         const store = await loadStore(quotaStorePath);
         const q = currentQuota(store, id, e.reset.tz, now);
-        q.exhaustedUntil = nextReset(e.reset.tz, now).toISOString();
+        const until = nextReset(e.reset.tz, now).toISOString();
+        if (capability) q.exhaustedFor = { ...q.exhaustedFor, [capability]: until };
+        else q.exhaustedUntil = until;
         store[id] = q;
         await saveStore(quotaStorePath, store);
       });

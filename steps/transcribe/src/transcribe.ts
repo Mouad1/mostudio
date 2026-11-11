@@ -82,6 +82,8 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       const segments: Segment[] = [];
       const used = new Map<string, { n: number; model: string }>();
       let detected: string | undefined;
+      // providers that hit a rate limit or rejected the key are not retried for later chunks of this run
+      const dead = new Set<string>();
       for (let i = 0; i < chunks.length; i++) {
         const offset = (chunks[i] as { start: number }).start;
         const { result, provider, attempts } = await withProvider(
@@ -92,9 +94,12 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
             if (!Array.isArray(r.words)) throw new Error(`${p.id}: no words in response`);
             return r;
           },
-          { prefer, private: true },
+          { prefer, private: true, exclude: [...dead] },
         );
-        for (const a of attempts) ctx.log(`chunk ${i + 1}: ${a.id} failed, rotating: ${a.error}`);
+        for (const a of attempts) {
+          ctx.log(`chunk ${i + 1}: ${a.id} failed, rotating: ${a.error}`);
+          if (a.status === 429 || a.status === 401 || a.status === 403) dead.add(a.id);
+        }
         const hit = used.get(provider.id);
         used.set(provider.id, { n: (hit?.n ?? 0) + 1, model: provider.model });
         if (!detected && result.words.length > 0) detected = result.language;

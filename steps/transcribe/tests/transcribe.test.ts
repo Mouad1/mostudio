@@ -297,3 +297,25 @@ test("buildSegments splits at gaps over 0.6 s", () => {
     { start: 2, end: 2.4, text: "c" },
   ]);
 });
+
+test("a provider that hit 429 or an auth error is skipped for later chunks", async () => {
+  await seed("long2.wav", "sine=frequency=440:duration=1300", 1300);
+  const { registry, picks } = fakeRegistry([entry("groq", "openai-compat"), entry("cloudflare", "native", { envValues: { accountId: "acc" } })]);
+  let groqCalls = 0;
+  const step = createTranscribe({
+    fetchImpl: async (url) => {
+      if (String(url).includes("fake.test")) {
+        groqCalls++;
+        return new Response("rate limited", { status: 429 });
+      }
+      return new Response(JSON.stringify({ success: true, result: { text: "hi", words: [{ word: " hi", start: 0, end: 0.3 }] } }), { status: 200 });
+    },
+  });
+  const r = await runStep(dir, step, { params: {}, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.chunks, 3);
+  assert.equal(groqCalls, 1);
+  assert.equal(picks.length, 4); // chunk 1: groq then cloudflare; chunks 2 and 3: cloudflare directly
+  assert.deepEqual(picks[2]?.exclude, ["groq"]);
+  assert.deepEqual(picks[3]?.exclude, ["groq"]);
+});

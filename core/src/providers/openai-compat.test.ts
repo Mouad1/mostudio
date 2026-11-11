@@ -187,3 +187,13 @@ test("withProvider rotates past a provider with config error", async () => {
   assert.deepEqual(used, ["b"]);
   assert.deepEqual(exhausted, []);
 });
+
+test("429 carries retryAfterSec from the response headers", async () => {
+  const impl: FetchLike = async () => new Response("slow down", { status: 429, headers: { "retry-after": "12" } });
+  await assert.rejects(chatComplete(provider(), [{ role: "user", content: "hi" }], { fetchImpl: impl }), (e: unknown) => {
+    assert.ok(e instanceof ProviderHttpError);
+    assert.equal(e.status, 429);
+    assert.equal(e.retryAfterSec, 12);
+    return true;
+  });
+});

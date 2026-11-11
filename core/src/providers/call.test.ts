@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { NonRetryableError, withProvider, ProviderHttpError } from "./call.ts";
+import { NonRetryableError, parseRetryAfter, withProvider, ProviderHttpError } from "./call.ts";
 import { NoProviderError } from "./registry.ts";
 import type { PickedProvider, PickOptions, ProviderRegistry } from "./registry.ts";
 
 function fakeRegistry(ids: string[]) {
-  const log = { used: [] as string[], exhausted: [] as string[], picks: [] as (PickOptions | undefined)[] };
+  const log = { used: [] as string[], exhausted: [] as string[], capabilities: [] as (string | undefined)[], picks: [] as (PickOptions | undefined)[] };
   const registry: ProviderRegistry = {
     async pick(capability, opts) {
       log.picks.push(opts);
@@ -26,8 +26,9 @@ function fakeRegistry(ids: string[]) {
     async recordUse(id) {
       log.used.push(id);
     },
-    async markExhausted(id) {
+    async markExhausted(id, _now, capability) {
       log.exhausted.push(id);
+      log.capabilities.push(capability);
     },
   };
   return { registry, log };
@@ -176,4 +177,80 @@ test("NonRetryableError is rethrown without rotating", async () => {
   assert.equal(calls, 1);
   assert.deepEqual(log.used, []);
   assert.deepEqual(log.exhausted, []);
+});
+
+test("parseRetryAfter reads seconds, HTTP dates and Groq reset durations", () => {
+  const now = Date.parse("2026-11-11T10:00:00Z");
+  assert.equal(parseRetryAfter(new Headers({ "retry-after": "7" }), now), 7);
+  assert.equal(parseRetryAfter(new Headers({ "retry-after": "Wed, 11 Nov 2026 10:01:30 GMT" }), now), 90);
+  assert.equal(parseRetryAfter(new Headers({ "x-ratelimit-reset-requests": "1m30s" }), now), 90);
+  assert.equal(parseRetryAfter(new Headers({ "x-ratelimit-reset-tokens": "12.5s" }), now), 12.5);
+  assert.equal(parseRetryAfter(new Headers({ "x-ratelimit-reset-tokens": "450ms", "x-ratelimit-reset-requests": "2h1m" }), now), 7260);
+  assert.equal(parseRetryAfter(new Headers({ "retry-after": "3", "x-ratelimit-reset-requests": "2h" }), now), 3);
+  assert.equal(parseRetryAfter(new Headers({}), now), undefined);
+  assert.equal(parseRetryAfter(new Headers({ "retry-after": "soon" }), now), undefined);
+});
+
+test("429 with a short Retry-After waits and retries the same provider once", async () => {
+  const { registry, log } = fakeRegistry(["groq", "cloudflare"]);
+  const slept: number[] = [];
+  let calls = 0;
+  const out = await withProvider(
+    registry,
+    "stt",
+    async (p) => {
+      calls++;
+      if (p.id === "groq" && calls === 1) throw new ProviderHttpError(429, "groq", "groq HTTP 429", 5);
+      return p.id;
+    },
+    { sleep: async (ms) => void slept.push(ms) },
+  );
+  assert.equal(out.result, "groq");
+  assert.deepEqual(slept, [5000]);
+  assert.deepEqual(log.exhausted, []);
+  assert.equal(out.attempts.length, 0);
+});
+
+test("429 again after the retry marks the provider exhausted for that capability and rotates", async () => {
+  const { registry, log } = fakeRegistry(["groq", "cloudflare"]);
+  const slept: number[] = [];
+  const out = await withProvider(
+    registry,
+    "llm",
+    async (p) => {
+      if (p.id === "groq") throw new ProviderHttpError(429, "groq", "groq HTTP 429", 2);
+      return p.id;
+    },
+    { sleep: async (ms) => void slept.push(ms) },
+  );
+  assert.equal(out.result, "cloudflare");
+  assert.deepEqual(slept, [2000]);
+  assert.deepEqual(log.exhausted, ["groq"]);
+  assert.deepEqual(log.capabilities, ["llm"]);
+  assert.equal(out.attempts[0]?.status, 429);
+});
+
+test("429 with a long Retry-After marks exhausted without waiting", async () => {
+  const { registry, log } = fakeRegistry(["groq", "cloudflare"]);
+  const slept: number[] = [];
+  const out = await withProvider(
+    registry,
+    "stt",
+    async (p) => {
+      if (p.id === "groq") throw new ProviderHttpError(429, "groq", "groq HTTP 429", 3600);
+      return p.id;
+    },
+    { sleep: async (ms) => void slept.push(ms) },
+  );
+  assert.equal(out.result, "cloudflare");
+  assert.deepEqual(slept, []);
+  assert.deepEqual(log.exhausted, ["groq"]);
+  assert.deepEqual(log.capabilities, ["stt"]);
+});
+
+test("withProvider exclude option skips providers from the first pick", async () => {
+  const { registry, log } = fakeRegistry(["a", "b"]);
+  const out = await withProvider(registry, "stt", async (p) => p.id, { exclude: ["a"] });
+  assert.equal(out.result, "b");
+  assert.deepEqual(log.picks[0]?.exclude, ["a"]);
 });

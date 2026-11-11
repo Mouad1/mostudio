@@ -278,3 +278,12 @@ test("seed cloudflare entry maps CLOUDFLARE_ACCOUNT_ID", () => {
   const example = readFileSync(new URL("../../../.env.example", import.meta.url), "utf8");
   assert.match(example, /^CLOUDFLARE_ACCOUNT_ID=/m);
 });
+
+test("markExhausted with a capability only blocks that capability", async () => {
+  const both = { capabilities: ["stt", "llm"] as ProviderEntry["capabilities"], priority: { stt: 1, llm: 1 } };
+  const reg = createRegistry([entry("a", both), entry("b", { ...both, priority: { stt: 2, llm: 2 } })], env, store(), "free-only");
+  await reg.markExhausted("a", t0, "llm");
+  assert.equal((await reg.pick("llm", { now: t0 })).id, "b");
+  assert.equal((await reg.pick("stt", { now: t0 })).id, "a");
+  assert.equal((await reg.pick("llm", { now: new Date("2026-11-04T08:00:00Z") })).id, "a");
+});

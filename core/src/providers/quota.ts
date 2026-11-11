@@ -8,6 +8,8 @@ export type ProviderQuota = {
   day: { count: number; resetAt: string };
   minute: number[];
   exhaustedUntil?: string;
+  /** Per-capability exhaustion (a 429 on llm need not block stt): capability -> ISO until. */
+  exhaustedFor?: Record<string, string>;
 };
 export type QuotaStore = Record<string, ProviderQuota>;
 
@@ -71,6 +73,10 @@ function normalize(raw: unknown): ProviderQuota | undefined {
   if (typeof r.exhaustedUntil === "string" && !Number.isNaN(Date.parse(r.exhaustedUntil))) {
     out.exhaustedUntil = r.exhaustedUntil;
   }
+  if (typeof r.exhaustedFor === "object" && r.exhaustedFor !== null && !Array.isArray(r.exhaustedFor)) {
+    const ok = Object.entries(r.exhaustedFor).filter(([, v]) => typeof v === "string" && !Number.isNaN(Date.parse(v)));
+    if (ok.length) out.exhaustedFor = Object.fromEntries(ok) as Record<string, string>;
+  }
   return out;
 }
 
@@ -113,5 +119,7 @@ export function currentQuota(
     minute: q.minute.filter((m) => m > t - MINUTE),
   };
   if (q.exhaustedUntil && Date.parse(q.exhaustedUntil) > t) out.exhaustedUntil = q.exhaustedUntil;
+  const live = Object.entries(q.exhaustedFor ?? {}).filter(([, until]) => Date.parse(until) > t);
+  if (live.length) out.exhaustedFor = Object.fromEntries(live);
   return out;
 }
