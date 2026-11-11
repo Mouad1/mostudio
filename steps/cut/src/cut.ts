@@ -5,7 +5,7 @@ import type { Range, StepContract, StepModule, Word } from "../../../core/src/in
 import contract from "../contract.json" with { type: "json" };
 import fillers from "../fillers.json" with { type: "json" };
 import type { FillerList } from "./detect.ts";
-import { fillerWords, keepRanges, midWordCuts, retakeEvents } from "./detect.ts";
+import { fillerWords, keepRanges, midWordCuts, normalizeTimings, retakeEvents } from "./detect.ts";
 
 const WINDOW_MS = 10;
 const FADE_SEC = 0.01;
@@ -37,7 +37,9 @@ export const cut: StepModule = {
     const ingest = await readJson<{ file: string; durationSec: number }>(join(ctx.projectDir, "media", "ingest.json"));
     if (!ingest?.file) throw new Error("media/ingest.json has no file");
     const tr = await readJson<{ words: Word[] }>(join(ctx.projectDir, "transcript", "words.json"));
-    const words = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start).sort((a, b) => a.start - b.start);
+    // transcript order is trusted; sorting by start would reorder the text when an ASR word starts early
+    const raw = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start);
+    const words = normalizeTimings(raw);
     if (words.length === 0) throw new Error("no words in transcript/words.json: nothing to cut (is the clip silent or music-only?)");
 
     const env = await rmsEnvelope(join(ctx.projectDir, "transcript", "audio.wav"), WINDOW_MS);
@@ -98,10 +100,11 @@ export const cut: StepModule = {
     const metrics = {
       removedPct,
       cutCount: removed.length,
-      midWordCuts: midWordCuts(keep, words, removedIdx),
+      // gates check the transcript's own timestamps (same indices as `words`), not the normalized ones
+      midWordCuts: midWordCuts(keep, raw, removedIdx),
       shortestKeepSec: keep.length === 0 ? 0 : round3(Math.min(...keep.map((k) => k.end - k.start))),
       fillersRemoved,
-      droppedWords: words.filter((w, i) => !removedIdx.has(i) && !keep.some((k) => (w.start + w.end) / 2 >= k.start && (w.start + w.end) / 2 <= k.end)).length,
+      droppedWords: raw.filter((w, i) => !removedIdx.has(i) && !keep.some((k) => (w.start + w.end) / 2 >= k.start && (w.start + w.end) / 2 <= k.end)).length,
       retakePhrasesRemoved,
       longestRetakeSec,
       retakesRemoved,

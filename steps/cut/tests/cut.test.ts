@@ -117,3 +117,20 @@ test("end to end: filler, retake and long pause", async () => {
   assert.equal(r.metrics.droppedWords, 0);
   assert.equal(r.metrics.midWordCuts, 0);
 });
+
+test("real Groq transcript with a word starting before its predecessor: no mid-word cut, no dropped word", async () => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/groq-nested-word.json", import.meta.url), "utf8"));
+  execFileSync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=71:sample_rate=16000",
+    "-ac", "1", "-c:a", "pcm_s16le", join(dir, "transcript", "audio.wav"),
+  ]);
+  await seed(fixture.words, 71);
+  for (const pace of ["natural", "tight"]) {
+    const r = await run({ pace });
+    // the fixture starts at 61 s, so removedPct warns; only the fail gates matter here
+    assert.notEqual(r.status, "fail", `${pace}: ${JSON.stringify(r.metrics)}`);
+    assert.equal(r.metrics.midWordCuts, 0, pace);
+    assert.equal(r.metrics.droppedWords, 0, pace);
+  }
+});

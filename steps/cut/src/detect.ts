@@ -11,6 +11,23 @@ export function normalizeWord(w: string, collapse = false): string {
   return collapse ? n.replace(/(\p{L})\1+/gu, "$1") : n;
 }
 
+/**
+ * Words in transcript order with monotonic, non-overlapping timings: each start is clamped to the latest end
+ * so far (and each end to at least its start). ASR timestamps can overlap, nest, or start before the previous
+ * word (seen with Groq whisper-large-v3); the text order is trusted, the timestamps are not. Clamping the later
+ * word keeps every earlier word whole and handles nested/reversed words, where splitting an overlap at its
+ * midpoint is undefined. Everything downstream (runs, paddings, snapping, minKeep) assumes this.
+ */
+export function normalizeTimings(words: Word[]): Word[] {
+  let at = 0;
+  return words.map((w) => {
+    const start = Math.max(w.start, at);
+    const end = Math.max(w.end, start);
+    at = end;
+    return start === w.start && end === w.end ? w : { ...w, start, end };
+  });
+}
+
 export type FillerList = { always: string[]; isolated?: string[] };
 
 const ISOLATED_GAP_SEC = 0.3;
@@ -113,7 +130,7 @@ export type KeepOptions = {
 type Run = { first: number; last: number };
 type Keep = { start: number; end: number; lo: number; hi: number; firstWord: Word; lastWord: Word; first: number; last: number };
 
-/** Keep ranges around runs of kept words; boundaries never enter a neighbouring word. */
+/** Keep ranges around runs of kept words; boundaries never enter a neighbouring word. `words` must be normalized (see normalizeTimings). */
 export function keepRanges(words: Word[], removedIdx: Set<number>, opts: KeepOptions): Range[] {
   const runs: Run[] = [];
   let cur: Run | undefined;
