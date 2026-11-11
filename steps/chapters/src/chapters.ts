@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { chatComplete, mapToCut, NoProviderError, readJson, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
+import { chatComplete, mapToCut, NoProviderError, normalizeWordTimings, readJson, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildMessages, buildTranscript, mmss } from "./prompt.ts";
@@ -15,10 +15,10 @@ const LLM_TIMEOUT_MS = 45_000;
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
-/** Source words -> cut timeline (a word is kept when its midpoint is inside a keep). */
+/** Source words (transcript order, normalized timings) -> cut timeline (a word is kept when its midpoint is inside a keep). Never sorts by start: that reorders the text. */
 function toCut(words: Word[], keep: Range[]): Word[] {
   const out: Word[] = [];
-  for (const w of [...words].sort((a, b) => a.start - b.start)) {
+  for (const w of words) {
     const mid = (w.start + w.end) / 2;
     const k = keep.find((r) => mid >= r.start && mid <= r.end);
     if (!k) continue;
@@ -140,7 +140,8 @@ export const chapters: StepModule = {
     const edl = await readJson<{ keep: Range[]; outDurationSec: number }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep)) throw new Error("cut/edl.json has no keep list");
     const outDur = edl.outDurationSec;
-    const source = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start);
+    // words.json from transcribe v2 is already normalized; this covers older files
+    const source = normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
     const words = toCut(source, edl.keep);
     const language = typeof ctx.params.language === "string" && ctx.params.language !== "" ? ctx.params.language : undefined;
     const prefer = typeof ctx.params.prefer === "string" && ctx.params.prefer !== "" ? ctx.params.prefer : undefined;

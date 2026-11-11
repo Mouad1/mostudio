@@ -1,6 +1,6 @@
 {
   "name": "captions",
-  "version": "1",
+  "version": "2",
   "inputs": [
     "media/ingest.json",
     "transcript/words.json",

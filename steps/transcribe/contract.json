@@ -1,6 +1,6 @@
 {
   "name": "transcribe",
-  "version": "1",
+  "version": "2",
   "inputs": ["media/ingest.json"],
   "outputs": ["transcript/audio.wav", "transcript/words.json"],
   "params": { "language": "string?", "prefer": "string?" },

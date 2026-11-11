@@ -106,6 +106,22 @@ test("writes words.json from a fake stt provider", async () => {
   assert.ok(existsSync(join(dir, "transcript", "audio.wav")));
 });
 
+test("overlapping provider words are written in transcript order with monotonic timings", async () => {
+  await seed("ov.wav", "sine=frequency=440:duration=3", 3);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  // Groq pattern: "with" starts before "skin" and spans past it; "while" overlaps "margins"
+  const step = createTranscribe({
+    fetchImpl: async () => verbose([["the", 0.92, 1.1], ["skin", 1.1, 1.38], ["with", 0.9, 1.98], ["a", 1.98, 2.12], ["margins", 2.12, 2.6], ["while", 2.4, 2.8]]),
+  });
+  const r = await runStep(dir, step, { params: {}, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r.verdicts));
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["the", "skin", "with", "a", "margins", "while"]);
+  assert.deepEqual([j.words[2].start, j.words[2].end], [1.38, 1.98]);
+  assert.deepEqual([j.words[5].start, j.words[5].end], [2.6, 2.8]);
+  for (let i = 1; i < j.words.length; i++) assert.ok(j.words[i].start >= j.words[i - 1].end, `word ${i}`);
+});
+
 test("planChunks: no split at or under 600 s", () => {
   const env = new Float32Array(60_000).fill(-30);
   assert.deepEqual(planChunks(600, env, 10), [{ start: 0, end: 600 }]);

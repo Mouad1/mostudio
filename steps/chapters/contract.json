@@ -1,6 +1,6 @@
 {
   "name": "chapters",
-  "version": "1",
+  "version": "2",
   "inputs": [
     "transcript/words.json",
     "cut/edl.json"

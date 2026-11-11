@@ -15,10 +15,10 @@ export const SHORT_MAX_WORDS = 3;
 
 const r3 = (n: number): number => Math.round(n * 1000) / 1000;
 
-/** Source words -> cut timeline. A word is kept when its midpoint is in a keep; its edges are clamped into that keep. */
+/** Source words (transcript order, normalized timings) -> cut timeline. A word is kept when its midpoint is in a keep; its edges are clamped into that keep. Never sorts by start: that reorders the text. */
 export function toCutWords(words: Word[], keep: Range[]): CutWord[] {
   const out: CutWord[] = [];
-  for (const w of [...words].sort((a, b) => a.start - b.start)) {
+  for (const w of words) {
     const mid = (w.start + w.end) / 2;
     const seg = keep.findIndex((k) => mid >= k.start && mid <= k.end);
     if (seg < 0) continue;

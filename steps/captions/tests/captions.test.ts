@@ -158,6 +158,15 @@ test("step writes cues, srt, ass, txt and metrics with replacements", async () =
   assert.match(await readFile(join(dir, "captions", "captions.ass"), "utf8"), /PlayResX: 1920[\s\S]*Dialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,this is Marginol labs speaking/);
 });
 
+test("words whose timestamps overlap keep transcript order in captions.txt", async () => {
+  // real Groq pattern (shifted by -60 s): "with" starts before "skin" and spans past it
+  await seed([W("on", 5.76, 5.92), W("the", 5.92, 6.1), W("skin", 6.1, 6.38), W("with", 5.9, 6.98), W("a", 6.98, 7.12), W("fair", 7.12, 7.32)], [{ start: 5, end: 8 }]);
+  const r = await run();
+  assert.notEqual(r.status, "fail", JSON.stringify(r));
+  const txt = await readFile(join(dir, "captions", "captions.txt"), "utf8");
+  assert.match(txt, /\] on the skin with a fair\n$/, txt);
+});
+
 test("arabic-script words raise arabicScriptPct", async () => {
   await seed(seq(["salam", "مرحبا", "x", "y"]), [{ start: 0, end: 10 }]);
   const r = await run();

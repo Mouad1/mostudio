@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Word } from "../../../core/src/index.ts";
-import { fillerWords, keepRanges, midWordCuts, normalizeTimings, retakeSpans } from "../src/detect.ts";
+import { normalizeWordTimings } from "../../../core/src/index.ts";
+import { fillerWords, keepRanges, midWordCuts, retakeSpans } from "../src/detect.ts";
 
 const FILLERS = ["euh", "heu", "hum", "hmm", "um", "uh", "erm", "ah", "eh", "bah"];
 const W = (w: string, start: number, end: number): Word => ({ w, start, end });
@@ -136,25 +137,10 @@ test("empty input gives no keeps", () => {
   assert.deepEqual(keepRanges([], new Set(), opts()), []);
 });
 
-test("normalizeTimings keeps transcript order and makes timings monotonic", () => {
-  // Groq pattern: "with" starts before "skin" and spans past it
-  const raw = [W("the", 65.92, 66.1), W("skin", 66.1, 66.38), { w: "with", start: 65.9, end: 66.98, conf: 0.8 }, W("a", 66.98, 67.12)];
-  const n = normalizeTimings(raw);
-  assert.deepEqual(n.map((w) => w.w), ["the", "skin", "with", "a"]);
-  assert.deepEqual(n[2], { w: "with", start: 66.38, end: 66.98, conf: 0.8 });
-  // partial overlap: start clamped to the previous end
-  assert.deepEqual(normalizeTimings([W("margins", 25.48, 26.48), W("while", 26, 26.82)])[1], W("while", 26.48, 26.82));
-  // fully nested: zero length at the previous end
-  assert.deepEqual(normalizeTimings([W("areas", 51.7, 52.88), W("we", 52.7, 52.8), W("go", 53, 53.2)]).slice(1), [W("we", 52.88, 52.88), W("go", 53, 53.2)]);
-  for (let i = 1; i < n.length; i++) assert.ok((n[i] as Word).start >= (n[i - 1] as Word).end);
-  assert.deepEqual(normalizeTimings(n), n, "idempotent");
-  assert.equal(raw[2]?.start, 65.9, "input not mutated");
-});
-
 test("a word starting before its predecessor never gets a cut inside it", () => {
   const raw = [W("on", 65.76, 65.92), W("the", 65.92, 66.1), W("skin", 66.1, 66.38), W("with", 65.9, 66.98), W("a", 66.98, 67.12), W("fair", 67.12, 67.32)];
   for (const pace of [opts(), opts({ maxGap: 0.25, pre: 0.05, post: 0.08 })]) {
-    const keep = keepRanges(normalizeTimings(raw), new Set(), pace);
+    const keep = keepRanges(normalizeWordTimings(raw), new Set(), pace);
     assert.equal(keep.length, 1, JSON.stringify(keep));
     assert.equal(midWordCuts(keep, raw), 0, JSON.stringify(keep));
   }

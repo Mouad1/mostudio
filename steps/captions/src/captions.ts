@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readJson, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
+import { normalizeWordTimings, readJson, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildAss } from "./ass.ts";
@@ -29,7 +29,8 @@ export const captions: StepModule = {
     const edl = await readJson<{ keep: Range[] }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep)) throw new Error("cut/edl.json has no keep list");
     const keep = edl.keep;
-    const source = (tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start);
+    // words.json from transcribe v2 is already normalized; this covers older files
+    const source = normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
 
     let repText = "";
     try {

@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  normalizeWordTimings,
   readJson,
   resolveFfmpeg,
   rmsEnvelope,
@@ -77,7 +78,7 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
         throw new Error(`transcribe: unsupported stt provider ${p.id} (${p.kind})`);
       };
 
-      const words: Word[] = [];
+      const rawWords: Word[] = [];
       const segments: Segment[] = [];
       const used = new Map<string, { n: number; model: string }>();
       let detected: string | undefined;
@@ -99,7 +100,7 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
         if (!detected && result.words.length > 0) detected = result.language;
         const segs = result.segments.length > 0 ? result.segments : buildSegments(result.words);
         for (const w of result.words) {
-          words.push({ ...w, start: round3(w.start + offset), end: round3(w.end + offset) });
+          rawWords.push({ ...w, start: round3(w.start + offset), end: round3(w.end + offset) });
         }
         for (const s of segs) segments.push({ ...s, start: round3(s.start + offset), end: round3(s.end + offset) });
         ctx.log(`chunk ${i + 1}/${chunks.length}: ${result.words.length} words via ${provider.id}`);
@@ -108,6 +109,8 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       const top = [...used.entries()].sort((a, b) => b[1].n - a[1].n)[0];
       const prov = top ? { id: top[0], model: top[1].model } : undefined;
       const lang = detected ?? language ?? "unknown";
+      // ASR timestamps can overlap or start before the previous word: transcript order wins, timings made monotonic
+      const words = normalizeWordTimings(rawWords);
       await mkdir(join(ctx.projectDir, "transcript"), { recursive: true });
       await writeJsonAtomic(join(ctx.projectDir, "transcript", "words.json"), {
         language: lang,
