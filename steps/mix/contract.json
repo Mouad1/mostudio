@@ -1,0 +1,13 @@
+{
+  "name": "mix",
+  "version": "1",
+  "inputs": ["media/ingest.json", "cut/edl.json"],
+  "outputs": ["audio/mix.wav"],
+  "params": { "music": "string?", "musicDb": "number?", "targetLufs": "number?" },
+  "fileParams": ["music"],
+  "private": true,
+  "gate": [
+    { "metric": "integratedLufs", "op": "between", "value": [-15, -13], "level": "fail" },
+    { "metric": "truePeakDb", "op": "<=", "value": -1, "level": "fail" }
+  ]
+}

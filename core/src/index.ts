@@ -25,7 +25,7 @@ export { chatComplete, transcribeAudio } from "./providers/openai-compat.ts";
 export type { FetchLike, Word } from "./providers/openai-compat.ts";
 export { nextReset } from "./providers/quota.ts";
 export { createRedactor, publicEnv } from "./redact.ts";
-export { pickH264Encoder, resolveBin, resolveFfmpeg, runBin } from "./proc.ts";
+export { pickH264Encoder, resolveBin, resolveFfmpeg, runBin, runBinCapture } from "./proc.ts";
 export type { BinName } from "./proc.ts";
 export type { Redactor } from "./redact.ts";
 export { runStep } from "./step.ts";
@@ -33,3 +33,5 @@ export type { ParamType, StepContext, StepContract, StepModule, StepOutput } fro
 export { keepDuration, mapToCut } from "./timeline.ts";
 export type { Range } from "./timeline.ts";
 export { quietestPoint, rmsEnvelope } from "./audio/envelope.ts";
+export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.ts";
+export type { Loudness, LoudnormStats } from "./audio/loudness.ts";

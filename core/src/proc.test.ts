@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveBin, runBin } from "./proc.ts";
+import { resolveBin, runBin, runBinCapture } from "./proc.ts";
 
 test("resolveBin defaults to the binary name", () => {
   assert.equal(resolveBin("ffmpeg", {}), "ffmpeg");
@@ -91,4 +91,9 @@ test("pickH264Encoder prefers videotoolbox, falls back to libx264, env forces so
   assert.equal(await pickH264Encoder(hw, {}), "h264_videotoolbox");
   assert.equal(await pickH264Encoder(sw, {}), "libx264");
   assert.equal(await pickH264Encoder(hw, { MOSTUDIO_ENCODER: "libx264" }), "libx264");
+});
+
+test("runBinCapture returns stdout and stderr", async () => {
+  const r = await runBinCapture(process.execPath, ["-e", "process.stdout.write('o');process.stderr.write('e')"]);
+  assert.deepEqual(r, { stdout: "o", stderr: "e" });
 });
