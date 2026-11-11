@@ -39,7 +39,7 @@ export async function loudnormPass(
 ): Promise<LoudnormStats> {
   const ffmpeg = await resolveFfmpeg(env, ["loudnorm"]);
   const af = `${opts.prefilter ? `${opts.prefilter},` : ""}loudnorm=I=-14:TP=-1:LRA=50:print_format=json`;
-  const { stderr } = await runBinCapture(ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-af", af, "-f", "null", "-"], 600_000);
+  const { stderr } = await runBinCapture(ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", af, "-f", "null", "-"], 600_000);
   return parseLoudnorm(stderr);
 }
 
