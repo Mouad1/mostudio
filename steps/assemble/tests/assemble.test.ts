@@ -345,3 +345,14 @@ test("HDR without zscale/tonemap falls back to a plain build with a warning", as
   assert.equal(got.toneMap, false);
   assert.match(got.warning ?? "", /HDR.*zscale/);
 });
+
+test("4K-class source: CFR intermediate is scaled into the preset box (no source-size intermediates)", async () => {
+  const dir = await project("big");
+  await seed(dir, [{ start: 0.2, end: 1.2 }], { w: 2560, h: 1440, srcSec: 2 });
+  const logs: string[] = [];
+  const r = await run(dir, { preset: "youtube", burnCaptions: false }, process.env, (m) => logs.push(m));
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.ok(logs.some((l) => /CFR intermediate \(2 s source, fit 1920x1080\)/.test(l)), logs.join("\n"));
+  assert.equal(r.metrics.width, 1920);
+  assert.equal(r.metrics.height, 1080);
+});

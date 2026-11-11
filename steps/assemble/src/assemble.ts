@@ -3,7 +3,7 @@ import { join, sep } from "node:path";
 import { clampKeeps, durationBound, pickH264Encoder, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
-import { batchGraph, escapeFilterPath, frameCounts, presetFilter } from "./filters.ts";
+import { batchGraph, escapeFilterPath, fitFilter, frameCounts, presetFilter } from "./filters.ts";
 import type { Segment } from "./filters.ts";
 import { renderCaptions } from "./hyperframes.ts";
 import type { Cue } from "./hyperframes.ts";
@@ -188,20 +188,26 @@ export const assemble: StepModule = {
     await mkdir(join(ctx.projectDir, "renders"), { recursive: true });
     try {
       // 1. one constant-frame-rate, video-only intermediate of the source on the audio clock: every grid time has
-      // a frame (VFR gaps are filled with the held frame), so batches can input-seek and count frames safely
+      // a frame (VFR gaps are filled with the held frame), so batches can input-seek and count frames safely.
+      // It is scaled down into the preset box here, so large sources never produce source-size intermediates.
       const cfrFile = join(cache, "cfr.mp4");
       const lastEnd = Math.max(...keeps.map((k) => k.end));
+      const cfrSec = Math.min(lastEnd + 1, typeof ingest.durationSec === "number" && ingest.durationSec > 0 ? ingest.durationSec : Infinity);
+      ctx.log(`assemble: CFR intermediate (${round(cfrSec, 1)} s source, fit ${size.width}x${size.height})…`);
+      const cfrVf = [`setpts=PTS-${t(aOff)}/TB`, `fps=${fps}:start_time=0`, ...(toneMap ? [TONEMAP] : []), fitFilter(size.width, size.height)].join(",");
       await runBin(
         ffmpeg,
-        [...BASE, "-i", source, "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", `setpts=PTS-${t(aOff)}/TB,fps=${fps}:start_time=0${toneMap ? `,${TONEMAP}` : ""}`, ...encodeArgs(encoder, false), "-t", t(lastEnd + 1), cfrFile],
+        [...BASE, "-i", source, "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", cfrVf, ...encodeArgs(encoder, false), "-t", t(lastEnd + 1), cfrFile],
         FF_TIMEOUT_MS,
       );
 
-      // 2. video-only cut in batches of <= 60 keeps, source resolution
+      // 2. video-only cut in batches of <= 60 keeps
       const batchSize = Number(ctx.env.MOSTUDIO_ASSEMBLE_BATCH) > 0 ? Math.floor(Number(ctx.env.MOSTUDIO_ASSEMBLE_BATCH)) : BATCH;
       const frames = frameCounts(keeps, fps);
       const batches: string[] = [];
+      const nBatches = Math.ceil(keeps.length / batchSize);
       for (let i = 0; i < keeps.length; i += batchSize) {
+        ctx.log(`assemble: batch ${i / batchSize + 1}/${nBatches}`);
         const slice = keeps.slice(i, i + batchSize);
         const counts = frames.slice(i, i + batchSize);
         const first = slice[0];
@@ -219,11 +225,12 @@ export const assemble: StepModule = {
         );
         batches.push(file);
       }
+      await rm(cfrFile, { force: true });
       if (batches.length === 0) throw new Error("every keep range is shorter than one frame");
-      const cut = join(cache, "cut.mp4");
+      // the batches are joined by the concat demuxer as the final pass reads them (no joined copy on disk)
       const list = join(cache, "list.txt");
       await writeFile(list, `${batches.map(concatLine).join("\n")}\n`);
-      await runBin(ffmpeg, [...BASE, "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-an", cut], FF_TIMEOUT_MS);
+      const cut = ["-f", "concat", "-safe", "0", "-i", list];
 
       // 3. final pass: preset size, captions, mixed audio
       const finalPath = join(ctx.projectDir, "renders", "final.mp4");
@@ -233,7 +240,7 @@ export const assemble: StepModule = {
       const tail = ["-t", t(outDur), "-movflags", "+faststart"];
       if (renderer === "hyperframes") {
         const presetCut = join(cache, "cut-preset.mp4");
-        await runBin(ffmpeg, [...BASE, "-i", cut, "-vf", preset, "-an", ...encodeArgs(encoder, false), ...cfr, "-t", t(outDur), presetCut], FF_TIMEOUT_MS);
+        await runBin(ffmpeg, [...BASE, ...cut, "-vf", preset, "-an", ...encodeArgs(encoder, false), ...cfr, "-t", t(outDur), presetCut], FF_TIMEOUT_MS);
         const cues = (await readJson<Cue[]>(join(ctx.projectDir, "captions", "cues.json"))) ?? [];
         if (!Array.isArray(cues)) throw new Error("captions/cues.json is not an array");
         const captioned = join(cache, "captioned.mp4");
@@ -264,7 +271,7 @@ export const assemble: StepModule = {
         await writeOutputAtomic(finalPath, (tmp) =>
           runBin(
             ffmpeg,
-            [...BASE, "-i", cut, "-i", mixWav, "-map", "0:v:0", "-map", "1:a:0", "-vf", vf, ...encodeArgs(encoder, true), ...cfr, ...audio, ...tail, tmp],
+            [...BASE, ...cut, "-i", mixWav, "-map", "0:v:0", "-map", "1:a:0", "-vf", vf, ...encodeArgs(encoder, true), ...cfr, ...audio, ...tail, tmp],
             FF_TIMEOUT_MS,
           ).then(() => {}),
         );

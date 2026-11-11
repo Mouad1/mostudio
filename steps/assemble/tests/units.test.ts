@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { checkAssSize, resolveAssembleFfmpeg } from "../src/assemble.ts";
-import { escapeFilterPath, frameCounts, presetFilter } from "../src/filters.ts";
+import { escapeFilterPath, fitFilter, frameCounts, presetFilter } from "../src/filters.ts";
 import { buildComposition, hyperframesCommand } from "../src/hyperframes.ts";
 import { chooseRenderer, presetSize } from "../src/presets.ts";
 
@@ -107,4 +107,8 @@ test("checkAssSize: same aspect passes, a different one names the fix", async ()
   await assert.rejects(checkAssSize(f, 1080, 1920), /^Error: captions\.ass is 640x360 but output is 1080x1920: re-run captions with --param width=1080 --param height=1920$/);
   await writeFile(f, "[Script Info]\n");
   await checkAssSize(f, 1080, 1920);
+});
+
+test("fitFilter scales down into the preset box, never up, even dimensions", () => {
+  assert.equal(fitFilter(1920, 1080), "scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease:force_divisible_by=2");
 });

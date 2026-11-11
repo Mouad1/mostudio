@@ -12,6 +12,14 @@ export function escapeFilterPath(p: string): string {
   return option.replace(/[\\'[\],;]/g, "\\$&");
 }
 
+/**
+ * Scale down to fit inside width x height keeping the aspect ratio, never up, even dimensions (yuv420p).
+ * Applied in the CFR pass so a 4K source never produces 4K intermediates.
+ */
+export function fitFilter(width: number, height: number): string {
+  return `scale=w='min(iw,${width})':h='min(ih,${height})':force_original_aspect_ratio=decrease:force_divisible_by=2`;
+}
+
 /** CFR + scale to fit + black pad + square pixels, applied once in the final pass. */
 export function presetFilter(width: number, height: number, fps: number): string {
   return `fps=${fps},scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
