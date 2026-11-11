@@ -20,16 +20,21 @@ function bearer(p: PickedProvider): string {
   return `Bearer ${key}`;
 }
 
-async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<unknown> {
+/** POST and return the OK response; a non-2xx becomes a ProviderHttpError with the key redacted from its body. */
+async function request(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<Response> {
   const res = await f(url, { ...init, method: "POST", signal: AbortSignal.timeout(timeoutMs) });
-  const text = await res.text();
   if (!res.ok) {
-    let redacted = text;
+    let redacted = await res.text();
     const secret = p.key?.reveal();
     if (secret) redacted = redacted.split(secret).join("[redacted]");
     const snippet = redacted.slice(0, 200);
     throw new ProviderHttpError(res.status, p.id, `${p.id} HTTP ${res.status}: ${snippet}`, parseRetryAfter(res.headers));
   }
+  return res;
+}
+
+async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<unknown> {
+  const text = await (await request(p, url, init, f, timeoutMs)).text();
   try {
     return JSON.parse(text);
   } catch {
@@ -37,9 +42,32 @@ async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchL
   }
 }
 
+export type PostOptions = { fetchImpl?: FetchLike; timeoutMs?: number; headers?: Record<string, string> };
+
+function jsonInit(p: PickedProvider, body: unknown, headers: Record<string, string> = {}): RequestInit {
+  return { headers: { ...headers, authorization: bearer(p), "content-type": "application/json" }, body: JSON.stringify(body) };
+}
+
+/** POST a JSON body to `baseUrl + path` with the provider's key; returns the parsed JSON reply. */
+export async function postJson(p: PickedProvider, path: string, body: unknown, opts: PostOptions = {}): Promise<unknown> {
+  const url = endpoint(p, path);
+  return post(p, url, jsonInit(p, body, opts.headers), opts.fetchImpl ?? fetch, opts.timeoutMs ?? 120_000);
+}
+
+/** POST a JSON body and return the raw reply bytes (e.g. TTS audio, image data). */
+export async function postBinary(p: PickedProvider, path: string, body: unknown, opts: PostOptions = {}): Promise<Uint8Array> {
+  const url = endpoint(p, path);
+  const res = await request(p, url, jsonInit(p, body, opts.headers), opts.fetchImpl ?? fetch, opts.timeoutMs ?? 300_000);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/** Chat message content: plain text, or parts mixing text and images (vision models). */
+export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ContentPart[] };
+
 export async function chatComplete(
   p: PickedProvider,
-  messages: { role: "system" | "user"; content: string }[],
+  messages: ChatMessage[],
   opts: { json?: boolean; fetchImpl?: FetchLike; timeoutMs?: number } = {},
 ): Promise<string> {
   const url = endpoint(p, "/chat/completions");

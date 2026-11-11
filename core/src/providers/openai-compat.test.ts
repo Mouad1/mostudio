@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { getSecret } from "../config.ts";
 import { NonRetryableError, ProviderHttpError } from "./call.ts";
 import { withProvider } from "./call.ts";
-import { chatComplete, transcribeAudio } from "./openai-compat.ts";
+import { chatComplete, postBinary, postJson, transcribeAudio } from "./openai-compat.ts";
 import type { FetchLike } from "./openai-compat.ts";
 import type { PickedProvider } from "./registry.ts";
 
@@ -196,4 +196,42 @@ test("429 carries retryAfterSec from the response headers", async () => {
     assert.equal(e.retryAfterSec, 12);
     return true;
   });
+});
+
+test("postJson posts JSON to baseUrl + path with the bearer key and parses the reply", async () => {
+  const f = fakeFetch(200, { data: [{ url: "x" }] });
+  const out = await postJson(provider(), "/images/generations", { prompt: "a cat" }, { fetchImpl: f.impl });
+  assert.deepEqual(out, { data: [{ url: "x" }] });
+  assert.equal(f.seen[0]?.url, "https://api.example.com/v1/images/generations");
+  assert.equal(f.seen[0]?.init.method, "POST");
+  const headers = new Headers(f.seen[0]?.init.headers);
+  assert.equal(headers.get("authorization"), "Bearer sk-secret-123");
+  assert.equal(headers.get("content-type"), "application/json");
+  assert.deepEqual(JSON.parse(String(f.seen[0]?.init.body)), { prompt: "a cat" });
+});
+
+test("postBinary returns the response bytes; errors are redacted ProviderHttpErrors", async () => {
+  const bytes = new Uint8Array([0x49, 0x44, 0x33, 0, 255]);
+  const ok: FetchLike = async () => new Response(bytes, { status: 200, headers: { "content-type": "audio/mpeg" } });
+  const out = await postBinary(provider(), "/audio/speech", { input: "hi", voice: "v" }, { fetchImpl: ok });
+  assert.ok(out instanceof Uint8Array);
+  assert.deepEqual([...out], [...bytes]);
+  const bad = fakeFetch(403, "key sk-secret-123 not allowed");
+  await assert.rejects(postBinary(provider(), "/audio/speech", {}, { fetchImpl: bad.impl }), (e: unknown) => {
+    assert.ok(e instanceof ProviderHttpError);
+    assert.equal(e.status, 403);
+    assert.ok(!e.message.includes("sk-secret-123"));
+    return true;
+  });
+});
+
+test("chatComplete accepts content parts (text + image_url) for vision", async () => {
+  const f = fakeFetch(200, { choices: [{ message: { content: "a red square" } }] });
+  const content = [
+    { type: "text" as const, text: "describe" },
+    { type: "image_url" as const, image_url: { url: "data:image/png;base64,AAAA" } },
+  ];
+  const out = await chatComplete(provider(), [{ role: "user", content }], { fetchImpl: f.impl });
+  assert.equal(out, "a red square");
+  assert.deepEqual(JSON.parse(String(f.seen[0]?.init.body)).messages, [{ role: "user", content }]);
 });
