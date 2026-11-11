@@ -23,6 +23,12 @@ const WINDOW_MS = 10;
 const EXTRACT_TIMEOUT_MS = 600_000;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
+/** ASR annotations, not speech: a whole token in () or [] ("(music)", "[Music]", "(applause).") or only music signs. */
+export function isNonSpeech(w: string): boolean {
+  const t = w.trim();
+  return /^[[(][^\])]*[\])][.,!?;:]*$/.test(t) || /^[♪♫♬♩\s]+$/.test(t);
+}
+
 type ChunkOut = { language: string; words: Word[]; segments: Segment[] };
 
 export type TranscribeDeps = { fetchImpl?: FetchLike };
@@ -116,8 +122,11 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       const top = [...used.entries()].sort((a, b) => b[1].n - a[1].n)[0];
       const prov = top ? { id: top[0], model: top[1].model } : undefined;
       const lang = detected ?? language ?? "unknown";
+      const speech = rawWords.filter((w) => !isNonSpeech(w.w));
+      const nonSpeechDropped = rawWords.length - speech.length;
+      if (nonSpeechDropped > 0) ctx.log(`dropped ${nonSpeechDropped} non-speech token(s) like (music) / ♪`);
       // ASR timestamps can overlap or start before the previous word: transcript order wins, timings made monotonic
-      const words = normalizeWordTimings(rawWords);
+      const words = normalizeWordTimings(speech);
       await mkdir(join(ctx.projectDir, "transcript"), { recursive: true });
       await writeJsonAtomic(join(ctx.projectDir, "transcript", "words.json"), {
         language: lang,
@@ -137,6 +146,7 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
         chunks: chunks.length,
         runtimeSec: Math.round((Date.now() - t0) / 100) / 10,
         provider: prov?.id ?? "none",
+        nonSpeechDropped,
       };
       if (confs.length === 0) metrics.confidenceKnown = false;
       return {

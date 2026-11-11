@@ -319,3 +319,17 @@ test("a provider that hit 429 or an auth error is skipped for later chunks", asy
   assert.deepEqual(picks[2]?.exclude, ["groq"]);
   assert.deepEqual(picks[3]?.exclude, ["groq"]);
 });
+
+test("bracketed non-speech tokens and music symbols are dropped", async () => {
+  await seed("ns.wav", "sine=frequency=440:duration=3", 3);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const step = createTranscribe({
+    fetchImpl: async () =>
+      verbose([["(music)", 0, 0.3], ["[Music]", 0.3, 0.5], ["♪", 0.5, 0.6], ["Hello", 0.6, 0.9], ["(applause).", 0.9, 1.1], ["♪♪", 1.1, 1.2], ["world", 1.2, 1.5], ["(really)?", 1.5, 1.6]]),
+  });
+  const r = await runStep(dir, step, { params: {}, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r.verdicts));
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["Hello", "world"]);
+  assert.equal(r.metrics.nonSpeechDropped, 6);
+});
