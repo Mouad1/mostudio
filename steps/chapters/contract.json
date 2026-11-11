@@ -1,0 +1,23 @@
+{
+  "name": "chapters",
+  "version": "1",
+  "inputs": [
+    "transcript/words.json",
+    "cut/edl.json"
+  ],
+  "outputs": [
+    "chapters/chapters.json",
+    "chapters/youtube.txt"
+  ],
+  "params": {
+    "language": "string?",
+    "prefer": "string?"
+  },
+  "private": true,
+  "gate": [
+    { "metric": "firstAtZero", "op": "==", "value": true, "level": "fail" },
+    { "metric": "chapterCount", "op": ">=", "value": 3, "level": "warn" },
+    { "metric": "minChapterSec", "op": ">=", "value": 10, "level": "fail" },
+    { "metric": "fallback", "op": "==", "value": false, "level": "warn" }
+  ]
+}
