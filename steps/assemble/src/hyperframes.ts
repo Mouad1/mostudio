@@ -1,40 +1,16 @@
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runBin } from "../../../core/src/index.ts";
+import { hyperframesLint, hyperframesRender } from "../../../core/src/index.ts";
 
 export type CueWord = { w: string; start: number; end: number };
 export type Cue = { start: number; end: number; text: string; words?: CueWord[] };
 export type Composition = { index: string; captions: string; config: string };
 
 const COMPONENT = new URL("../../../components/captions-karaoke/", import.meta.url);
-const PINNED = ["npx", "--yes", "hyperframes@0.9.26"];
-const RENDER_TIMEOUT_MS = 3_600_000;
 
 const r3 = (n: number): number => Math.round(n * 1000) / 1000;
 const esc = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-
-/**
- * The HyperFrames CLI: MOSTUDIO_HYPERFRAMES_BIN as a JSON array of strings (paths with spaces) or split on
- * whitespace, else the pinned npx package.
- */
-export function hyperframesCommand(env: Record<string, string | undefined>): string[] {
-  const custom = env.MOSTUDIO_HYPERFRAMES_BIN?.trim();
-  if (!custom) return [...PINNED];
-  if (custom.startsWith("[")) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(custom);
-    } catch {
-      throw new Error("MOSTUDIO_HYPERFRAMES_BIN starts with [ but is not a JSON array");
-    }
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((a) => typeof a === "string" && a)) {
-      throw new Error("MOSTUDIO_HYPERFRAMES_BIN must be a non-empty JSON array of strings");
-    }
-    return parsed;
-  }
-  return custom.split(/\s+/);
-}
 
 /** One caption group per cue, clamped to the composition; words become timed spans for the highlight. */
 function groups(cues: Cue[], durationSec: number): string {
@@ -100,8 +76,6 @@ export async function buildComposition(
   return { index, captions, config };
 }
 
-const fpsArg = (fps: number): string => (Number.isInteger(fps) ? String(fps) : `${Math.round(fps * 100)}/100`);
-
 /**
  * Write `sceneDir` (index.html, compositions/captions.html, hyperframes.json, assets/cut.mp4 moved from
  * `presetCut`), then `lint` and `render --quality looks` it to `out` (video only, preset size).
@@ -130,17 +104,7 @@ export async function renderCaptions(o: {
   await writeFile(join(o.sceneDir, "compositions", "captions.html"), c.captions);
   await writeFile(join(o.sceneDir, "hyperframes.json"), c.config);
 
-  const [bin, ...pre] = hyperframesCommand(o.env);
-  if (!bin) throw new Error("MOSTUDIO_HYPERFRAMES_BIN is empty");
-  await runBin(bin, [...pre, "lint", o.sceneDir], 600_000).catch((e: Error) => {
-    throw new Error(`HyperFrames lint failed for ${o.sceneDir}: ${e.message}`);
-  });
-  o.log(`assemble: HyperFrames render of ${o.durationSec}s captions (${o.width}x${o.height})`);
-  await runBin(
-    bin,
-    [...pre, "render", o.sceneDir, "--quality", "looks", "--fps", fpsArg(o.fps), "--format", "mp4", "-o", o.out, "--quiet"],
-    RENDER_TIMEOUT_MS,
-  ).catch((e: Error) => {
-    throw new Error(`HyperFrames render failed: ${e.message}`);
-  });
+  await hyperframesLint(o.env, o.sceneDir);
+  o.log(`assemble: HyperFrames render of ${o.durationSec}s captions (${o.width}x${o.height})…`);
+  await hyperframesRender(o.env, o.sceneDir, { fps: o.fps, out: o.out });
 }

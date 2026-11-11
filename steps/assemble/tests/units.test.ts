@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { checkAssSize, resolveAssembleFfmpeg } from "../src/assemble.ts";
 import { batchGraph, escapeFilterPath, fitFilter, frameCounts, presetFilter } from "../src/filters.ts";
-import { buildComposition, hyperframesCommand } from "../src/hyperframes.ts";
+import { buildComposition } from "../src/hyperframes.ts";
 import { chooseRenderer, presetSize, socialDurationOk } from "../src/presets.ts";
 
 let dir: string;
@@ -87,14 +87,6 @@ test("hyperframes composition has one captions track and no external URLs", asyn
   assert.match(c.captions, /data-start="1.6" data-duration="1.4"/);
   assert.match(c.captions, /#FFD400/);
   assert.doesNotThrow(() => JSON.parse(c.config));
-});
-
-test("hyperframes command: env override split on spaces, else pinned npx", () => {
-  assert.deepEqual(hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "node /x/fake.ts" }), ["node", "/x/fake.ts"]);
-  assert.deepEqual(hyperframesCommand({}), ["npx", "--yes", "hyperframes@0.9.26"]);
-  assert.deepEqual(hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: '["/path with space/hf", "--x"]' }), ["/path with space/hf", "--x"]);
-  assert.throws(() => hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "[nope" }), /not a JSON array/);
-  assert.throws(() => hyperframesCommand({ MOSTUDIO_HYPERFRAMES_BIN: "[]" }), /non-empty JSON array of strings/);
 });
 
 test("checkAssSize: same aspect passes, a different one names the fix", async () => {

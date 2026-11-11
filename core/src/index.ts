@@ -28,6 +28,8 @@ export { createRedactor, publicEnv } from "./redact.ts";
 export { pickH264Encoder, resolveBin, resolveFfmpeg, runBin, runBinCapture } from "./proc.ts";
 export type { BinName } from "./proc.ts";
 export type { Redactor } from "./redact.ts";
+export { hyperframesCommand, hyperframesLint, hyperframesRender } from "./hyperframes.ts";
+export type { HyperframesRenderOptions } from "./hyperframes.ts";
 export { runStep } from "./step.ts";
 export type { ParamType, RunStepOptions, StepContext, StepContract, StepModule, StepOutput } from "./step.ts";
 export { clampKeeps, durationBound, keepDuration, mapToCut, normalizeWordTimings } from "./timeline.ts";
