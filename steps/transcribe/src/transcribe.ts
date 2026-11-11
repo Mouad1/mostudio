@@ -19,6 +19,8 @@ import { buildSegments, transcribeWhisperCpp } from "./whisper-cpp.ts";
 import type { Segment } from "./whisper-cpp.ts";
 
 const WINDOW_MS = 10;
+/** Decoding the whole source (a long 4K file) to 16 kHz WAV can take minutes. */
+const EXTRACT_TIMEOUT_MS = 600_000;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
 type ChunkOut = { language: string; words: Word[]; segments: Segment[] };
@@ -39,7 +41,7 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       const wav = join(ctx.projectDir, "transcript", "audio.wav");
       await mkdir(join(ctx.projectDir, "transcript"), { recursive: true });
       await writeOutputAtomic(wav, (tmp) =>
-        runBin(ffmpeg, ["-y", "-v", "error", "-i", join(ctx.projectDir, ingest.file), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", tmp]).then(() => {}),
+        runBin(ffmpeg, ["-y", "-v", "error", "-i", join(ctx.projectDir, ingest.file), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", tmp], EXTRACT_TIMEOUT_MS).then(() => {}),
       );
       const env = await rmsEnvelope(wav, WINDOW_MS);
       const durationSec = round3((env.length * WINDOW_MS) / 1000);
