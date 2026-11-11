@@ -1,0 +1,25 @@
+<template>
+  <style>
+/*{{CSS}}*/
+#root {
+  --cap-bottom: {{BOTTOM}}px;
+  --cap-side: {{SIDE}}px;
+  --cap-size: {{SIZE}}px;
+  --cap-outline: {{OUTLINE}}px;
+}
+  </style>
+  <div id="root" data-composition-id="captions" data-width="{{WIDTH}}" data-height="{{HEIGHT}}" data-no-timeline>
+{{GROUPS}}
+  </div>
+  <script>
+    // Word highlight with the Web Animations API: each word is #FFD400 while it is spoken.
+    // Animations are paused; HyperFrames seeks document time, so each word is timed with `delay` (cut seconds).
+    document.querySelectorAll("#root .w[data-ws]").forEach(function (el) {
+      var s = Number(el.getAttribute("data-ws"));
+      var e = Number(el.getAttribute("data-we"));
+      var on = { color: "#FFD400" };
+      var a = el.animate([on, on], { delay: s * 1000, duration: Math.max(1, (e - s) * 1000), fill: "none" });
+      a.pause();
+    });
+  </script>
+</template>

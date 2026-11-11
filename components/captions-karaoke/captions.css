@@ -1,0 +1,31 @@
+/* captions-karaoke: one caption group at a time, the spoken word highlighted.
+   Sizes come from custom properties set per render (scaled from a 1080x1920 design). */
+#root {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--cap-bottom, 340px);
+  padding: 0 var(--cap-side, 108px);
+  text-align: center;
+  font-family: Inter, sans-serif;
+  font-weight: 900;
+  font-size: var(--cap-size, 76px);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  /* the outline eats into the gaps between words: widen them */
+  word-spacing: 0.18em;
+  overflow: visible;
+}
+.w {
+  display: inline-block;
+  color: #ffffff;
+  /* the stroke is centred on the glyph edge and painted under the fill: 2x width = visible outline */
+  -webkit-text-stroke: calc(var(--cap-outline, 6px) * 2) #000000;
+  paint-order: stroke fill;
+  text-shadow: 0 0 calc(var(--cap-outline, 6px) * 0.5) #000000;
+}
