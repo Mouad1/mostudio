@@ -1,4 +1,4 @@
-import { mkdir, open, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loudnormPass, measureLoudness, readJson, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
@@ -104,34 +104,55 @@ export const mix: StepModule = {
       await writeFile(list, `${batches.map(concatLine).join("\n")}\n`);
       await runBin(ffmpeg, [...BASE, "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", voice], MIX_TIMEOUT_MS);
 
-      // optional music, ducked under the voice
-      let pre = voice;
+      // voice pre-processing: high-pass + gentle speech compression so gain can be added later
+      const voiceP = join(cache, "voice-p.wav");
+      await runBin(
+        ffmpeg,
+        [...BASE, "-i", voice, "-af", "highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=120:makeup=2", ...PCM, voiceP],
+        MIX_TIMEOUT_MS,
+      );
+
+      // optional music, ducked under the voice (threshold relative to the voice loudness)
+      let pre = voiceP;
       if (music) {
+        const iVoice = (await loudnormPass(voiceP, ctx.env, { target })).input_i;
+        const threshold = Math.min(1, Math.max(0.000976563, 10 ** ((iVoice - 12) / 20)));
         pre = join(cache, "pre.wav");
         const graph = [
           `[1:a]atrim=0:${t(outDur)},asetpts=PTS-STARTPTS,aresample=${RATE},aformat=channel_layouts=stereo,volume=${musicDb}dB[m]`,
           "[0:a]asplit=2[v1][v2]",
-          "[m][v1]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=300[d]",
+          `[m][v1]sidechaincompress=threshold=${threshold.toFixed(6)}:ratio=8:attack=20:release=300[d]`,
           "[v2][d]amix=inputs=2:duration=first:normalize=0[mixed]",
         ].join(";");
         await runBin(
           ffmpeg,
-          [...BASE, "-i", voice, "-stream_loop", "-1", "-i", music, "-filter_complex", graph, "-map", "[mixed]", "-t", t(outDur), ...PCM, pre],
+          [...BASE, "-i", voiceP, "-stream_loop", "-1", "-i", music, "-filter_complex", graph, "-map", "[mixed]", "-t", t(outDur), ...PCM, pre],
           MIX_TIMEOUT_MS,
         );
       }
 
-      // two-pass loudness normalization
-      const s = await loudnormPass(pre, ctx.env, { target });
-      const af =
-        `loudnorm=I=${target}:TP=-1:LRA=50:measured_I=${s.input_i}:measured_TP=${s.input_tp}:measured_LRA=${s.input_lra}` +
-        `:measured_thresh=${s.input_thresh}:offset=${s.target_offset}:linear=true,aresample=${RATE}`;
+      // deterministic loudness: measure, gain + sample-peak limiter, verify, retry once if short
+      const i0 = (await loudnormPass(pre, ctx.env, { target })).input_i;
+      const render = async (gainDb: number, out: string): Promise<void> => {
+        const af = `volume=${gainDb.toFixed(3)}dB,alimiter=limit=0.708:attack=5:release=50:level=false`;
+        await runBin(ffmpeg, [...BASE, "-i", pre, "-af", af, ...PCM, out], MIX_TIMEOUT_MS);
+      };
+      let gain = target - i0;
+      let passes = 1;
+      let chosen = join(cache, "pass-1.wav");
+      await render(gain, chosen);
+      let got = await measureLoudness(chosen, ctx.env);
+      if (got.integratedLufs < target - 0.5) {
+        gain += target - got.integratedLufs;
+        passes = 2;
+        chosen = join(cache, "pass-2.wav");
+        await render(gain, chosen);
+        got = await measureLoudness(chosen, ctx.env);
+      }
       const finalPath = join(ctx.projectDir, "audio", "mix.wav");
       await writeOutputAtomic(finalPath, async (tmp) => {
-        await runBin(ffmpeg, [...BASE, "-i", pre, "-af", af, ...PCM, tmp], MIX_TIMEOUT_MS);
+        await copyFile(chosen, tmp);
       });
-
-      const got = await measureLoudness(finalPath, ctx.env);
       const durationSec = round(await wavDuration(finalPath), 3);
       const metrics = {
         integratedLufs: round(got.integratedLufs, 1),
@@ -139,6 +160,7 @@ export const mix: StepModule = {
         durationSec,
         segments: edl.keep.length,
         batches: batches.length,
+        passes,
         hasMusic: music !== undefined,
       };
       ctx.log(`mix: ${metrics.segments} segments, ${metrics.integratedLufs} LUFS, ${metrics.truePeakDb} dBTP, ${durationSec}s${music ? " + music" : ""}`);

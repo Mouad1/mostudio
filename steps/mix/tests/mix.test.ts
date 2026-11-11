@@ -111,3 +111,35 @@ test("edl.json is read-only input (unchanged)", async () => {
   await run();
   assert.equal(await readFile(join(dir, "cut", "edl.json"), "utf8"), before);
 });
+
+test("hot peaks with quiet passages still reach -14 LUFS with true peak <= -1", async () => {
+  ff("-f", "lavfi", "-i", "aevalsrc=0.05*sin(2*PI*220*t)+0.9*sin(2*PI*440*t)*lt(mod(t\\,3)\\,0.05):d=12:s=48000", "-ac", "2", join(dir, "media", "clip.wav"));
+  await seed([{ start: 0, end: 12 }]);
+  const r = await run();
+  const m = r.metrics as Record<string, number>;
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.ok(Math.abs(m.integratedLufs + 14) <= 1, String(m.integratedLufs));
+  assert.ok(m.truePeakDb <= -1, String(m.truePeakDb));
+  assert.ok(m.passes === 1 || m.passes === 2);
+});
+
+test("quiet voice source still ducks the music by >= 6 dB", async () => {
+  ff(
+    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=4",
+    "-f", "lavfi", "-i", "sine=f=220:d=4:sample_rate=48000",
+    "-filter_complex", "[1]volume=0.25,aformat=channel_layouts=stereo[b];[0][b]concat=n=2:v=0:a=1", join(dir, "media", "clip.wav"),
+  );
+  ff("-f", "lavfi", "-i", "sine=f=1000:d=3:sample_rate=48000", "-ac", "2", join(dir, "music.wav"));
+  await seed([{ start: 0, end: 8 }]);
+  const r = await run({ music: join(dir, "music.wav") });
+  assert.ok(r.metrics, JSON.stringify(r));
+  ff("-i", join(dir, "audio", "mix.wav"), "-af", "highpass=f=900,highpass=f=900,highpass=f=900,lowpass=f=1100,lowpass=f=1100,lowpass=f=1100", "-ar", "16000", "-ac", "1", join(dir, "band.wav"));
+  const env = await rmsEnvelope(join(dir, "band.wav"), 100);
+  const avg = (a: number, b: number): number => {
+    let s = 0;
+    for (let i = a; i < b; i++) s += 10 ** ((env[i] ?? -96) / 10);
+    return 10 * Math.log10(s / (b - a));
+  };
+  const d = avg(10, 35) - avg(55, 78);
+  assert.ok(d >= 6, `delta ${d.toFixed(1)} dB`);
+});
