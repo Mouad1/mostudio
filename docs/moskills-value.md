@@ -41,6 +41,8 @@ Add one row each time moskills changed an outcome (good or bad).
 | 2026-11-09 | modular-build + bounded review | Plan 1 built as 8 modules, each with own review; 13 Important defects caught per task (secret leak, cache gaps, crash safety) + 8 by final review before any Plan 2 code depended on them | + | .superpowers ledger, 28 commits |
 | 2026-11-09 | install (plugin path) | plugin's init command pointed at a stale worktree; main checkout used | − | baseline note |
 
+| 2026-11-11 | modular-build + bounded review (Plan 2) | 10 modules + 1 debug; per-task reviews caught ~30 Important defects (secret redaction gaps, kept-speech deletion, VFR desync, word-reorder bug, loudness on hot audio, 429 lockout) before the real-rush run | + | .superpowers ledger plan-2 |
+
 ## Costs to watch
 
 - Footprint: 89 files before any product code; skills duplicated in `.claude/` and `.agents/`.

@@ -57,3 +57,10 @@
 - Limitations / exact next step:
 - Required failed or unknown gates keep work Still not done. Not applicable needs a reason.
 - User validation is always required before commit, push, or merge; completion checks do not authorize these actions.
+
+## Modules (Plan 2 — rough cut)
+- [x] core: optional params, timeline + word-timing normalization, envelope, ffmpeg/encoder picker, provider loop (429 Retry-After, per-capability exhaustion), loudness, HyperFrames runner, workflow runner
+- [x] steps: transcribe (Groq→Cloudflare→whisper.cpp), cut, captions, mix, chapters, assemble (HDR tone-map, CFR, HyperFrames shorts), qa
+- [x] CLI run/approve/status; workflows rough-cut + short
+- [x] Live smoke on Marginol clip: rough-cut done (−14.4 LUFS, endDrift 10 ms), shorts render via HyperFrames
+- [ ] Task 11: real 10–20 min rush (needs user's clip), measure user time (G2 ≤ 30 min)
