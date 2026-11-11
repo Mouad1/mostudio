@@ -6,3 +6,4 @@ spikes/**/media/
 node_modules/
 .hyperframes/
 .DS_Store
+*-E

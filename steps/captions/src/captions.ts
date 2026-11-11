@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { keepDuration, readJson, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
+import { readJson, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildAss } from "./ass.ts";
@@ -9,7 +9,7 @@ import type { CaptionStyle } from "./group.ts";
 import { applyReplacements, parseReplacementsWithStats } from "./replace.ts";
 import { buildReviewText, buildSrt } from "./srt.ts";
 
-const ARABIC = /[؀-ۿ]/;
+const ARABIC = /[\u0600-\u06FF]/;
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 const size = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : undefined);
 
@@ -41,7 +41,9 @@ export const captions: StepModule = {
     const replaced = applyReplacements(source, rules);
 
     const cutWords = toCutWords(replaced.words, keep);
-    const cues = buildCues(cutWords, style, keepDuration(keep));
+    let acc = 0;
+    const segEnds = keep.map((k) => (acc += k.end - k.start));
+    const cues = buildCues(cutWords, style, segEnds);
 
     const outDir = join(ctx.projectDir, "captions");
     await mkdir(outDir, { recursive: true });

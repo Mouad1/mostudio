@@ -85,6 +85,15 @@ test("cue times are in the cut timeline and never cross a cut", () => {
   assert.ok(Math.abs(cues[1].start - (off + 0.1)) < 1e-9);
 });
 
+test("min-length extension never crosses a cut", () => {
+  const keep = [{ start: 0, end: 1 }, { start: 5, end: 6 }];
+  const cw = toCutWords([W("a", 0.8, 0.9), W("b", 5.0, 5.4)], keep);
+  const cues = buildCues(cw, "long", [1, 2]);
+  assert.equal(cues.length, 2);
+  assert.ok(cues[0].end <= 1 + 1e-9, String(cues[0].end));
+  assert.ok(cues[1].end - cues[1].start >= 0.4 - 1e-9);
+});
+
 test("word partly trimmed by padding is clamped into its keep", () => {
   const cw = toCutWords([W("edge", 0.9, 1.3)], [{ start: 1.0, end: 2 }]);
   assert.equal(cw.length, 1);

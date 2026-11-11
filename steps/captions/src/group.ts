@@ -31,8 +31,8 @@ export function toCutWords(words: Word[], keep: Range[]): CutWord[] {
   return out;
 }
 
-/** Group cut-timeline words into cues. Never crosses a keep boundary; min 0.5 s (extended into the following gap), max 5 s. */
-export function buildCues(words: CutWord[], style: CaptionStyle, totalSec = Infinity): Cue[] {
+/** Group cut-timeline words into cues. Never crosses a keep boundary; min 0.5 s (extended into the following gap, never past the cut-end of its keep), max 5 s. */
+export function buildCues(words: CutWord[], style: CaptionStyle, segEnds: number[] = []): Cue[] {
   const groups: CutWord[][] = [];
   let cur: CutWord[] = [];
   let chars = 0;
@@ -50,6 +50,7 @@ export function buildCues(words: CutWord[], style: CaptionStyle, totalSec = Infi
   }
   if (cur.length > 0) groups.push(cur);
 
+  const segOf = groups.map((g) => g[g.length - 1].seg);
   const cues: Cue[] = groups.map((g) => ({
     start: g[0].start,
     end: g[g.length - 1].end,
@@ -58,7 +59,7 @@ export function buildCues(words: CutWord[], style: CaptionStyle, totalSec = Infi
   }));
   cues.forEach((c, i) => {
     if (c.end - c.start >= MIN_CUE_SEC) return;
-    const limit = Math.min(i + 1 < cues.length ? cues[i + 1].start : Infinity, totalSec);
+    const limit = Math.min(i + 1 < cues.length ? cues[i + 1].start : Infinity, segEnds[segOf[i]] ?? Infinity);
     c.end = r3(Math.max(c.end, Math.min(c.start + MIN_CUE_SEC, limit)));
   });
   return cues;

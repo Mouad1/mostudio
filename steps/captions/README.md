@@ -7,9 +7,9 @@ Caption cues on the **cut** timeline from the word transcript and the edit list,
 - **Outputs:** `captions/cues.json` (array of `{ start, end, text, words: {w,start,end}[] }`, cut timeline, seconds), `captions.srt`, `captions.ass`, `captions.txt` (`[mm:ss.cc → mm:ss.cc] text`, for review).
 - **Mapping:** a word is kept when its midpoint is in a keep; its edges are clamped into that keep. Words in removed parts are dropped; a cue never crosses a cut.
 - **Params:** `style` = `long` (default: one line of at most 42 chars, font 48 on 1080 p, bottom margin 60) or `short` (at most 3 words, font 84 on 1080 wide, bottom margin 340, karaoke `\k` tags: white before the word is spoken, `#FFD400` after (Primary=highlight, Secondary=white), 6 px black outline); an unknown style fails. `width`/`height` default to `media/ingest.json` (else 1920x1080 long, 1080x1920 short). `font` defaults to `Arial`.
-- **Cues:** new cue after a gap over 0.6 s, a cut, 5 s, or the char/word limit; minimum 0.5 s (extended into the following gap, never over the next cue).
+- **Cues:** new cue after a gap over 0.6 s, a cut, 5 s, or the char/word limit; minimum 0.5 s (extended into the following gap, never over the next cue and never past the end of its keep).
 - **Metrics:** `cueCount, maxCharsPerLine, maxReadingSpeed` (chars/s, cues under 0.3 s excluded), `replacementsApplied, replacementRulesIgnored, arabicScriptPct`. **Gate:** `maxCharsPerLine <= 42` fail; `maxReadingSpeed <= 17`, `arabicScriptPct == 0`, `cueCount > 0` warn.
-- `arabicScriptPct` warns when the transcript is in Arabic script; Latin (Darija) rewriting is not part of this step.
+- `arabicScriptPct` is the share of kept words (after replacements) with Arabic-script letters (U+0600-U+06FF); it warns when the transcript is in Arabic script; Latin (Darija) rewriting is not part of this step.
 - No kept speech (zero keep or zero words) writes valid empty files and warns on `cueCount`.
 
 ```
