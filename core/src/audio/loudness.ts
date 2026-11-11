@@ -35,10 +35,10 @@ export function parseLoudnorm(stderr: string): LoudnormStats {
 export async function loudnormPass(
   file: string,
   env: Record<string, string | undefined>,
-  opts: { target?: number; prefilter?: string } = {},
+  opts: { prefilter?: string } = {},
 ): Promise<LoudnormStats> {
   const ffmpeg = await resolveFfmpeg(env, ["loudnorm"]);
-  const af = `${opts.prefilter ? `${opts.prefilter},` : ""}loudnorm=I=${opts.target ?? -14}:TP=-1:LRA=50:print_format=json`;
+  const af = `${opts.prefilter ? `${opts.prefilter},` : ""}loudnorm=I=-14:TP=-1:LRA=50:print_format=json`;
   const { stderr } = await runBinCapture(ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-af", af, "-f", "null", "-"], 600_000);
   return parseLoudnorm(stderr);
 }

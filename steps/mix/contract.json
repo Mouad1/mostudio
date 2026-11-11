@@ -8,6 +8,7 @@
   "private": true,
   "gate": [
     { "metric": "integratedLufs", "op": "between", "value": [-15, -13], "level": "fail" },
+    { "metric": "driftSec", "op": "<=", "value": 0.02, "level": "fail" },
     { "metric": "truePeakDb", "op": "<=", "value": -1, "level": "fail" }
   ]
 }

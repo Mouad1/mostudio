@@ -143,3 +143,49 @@ test("quiet voice source still ducks the music by >= 6 dB", async () => {
   const d = avg(10, 35) - avg(55, 78);
   assert.ok(d >= 6, `delta ${d.toFixed(1)} dB`);
 });
+
+test("audio with a non-zero start_time is cut at the right place", async () => {
+  // 0..2 s silence then 2..6 s tone, audio delayed by 0.5 s via -itsoffset in an mp4
+  ff("-f", "lavfi", "-i", "aevalsrc=0.5*sin(2*PI*220*t)*gte(t\\,2):d=6:s=48000", join(dir, "raw.wav"));
+  ff("-f", "lavfi", "-i", "color=c=black:s=64x64:d=7:r=10", "-itsoffset", "0.5", "-i", join(dir, "raw.wav"), "-c:v", "libx264", "-c:a", "aac", "-shortest", join(dir, "media", "off.mp4"));
+  const start = Number(execFileSync("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=start_time", "-of", "csv=p=0", join(dir, "media", "off.mp4")]).toString().trim());
+  assert.ok(start > 0.3, `fixture start_time ${start}`);
+  // zero-based audio content has tone from 2 s on; keep 2.2..3.2 (all tone when re-zeroed, 0.3 s of silence if the offset leaks)
+  await seed([{ start: 2.2, end: 3.2 }], "media/off.mp4");
+  const r = await run();
+  const m = r.metrics as Record<string, number>;
+  assert.ok(m.driftSec <= 0.02, String(m.driftSec));
+  // the kept 2 s must be tone throughout: loud everywhere
+  const env = await rmsEnvelope(join(dir, "audio", "mix.wav"), 100);
+  const quiet = Array.from(env).filter((v) => v < -45).length;
+  assert.ok(quiet <= 1, `quiet windows ${quiet}`);
+});
+
+test("keeps beyond the source are clamped and drift is reported", async () => {
+  makeVoice(join(dir, "media", "clip.wav"), 12);
+  await writeJsonAtomic(join(dir, "media", "ingest.json"), { file: "media/clip.wav", durationSec: 12, hasAudio: true });
+  await writeJsonAtomic(join(dir, "cut", "edl.json"), { source: "media/clip.wav", fadeSec: 0.01, keep: [{ start: 0, end: 2 }, { start: 11, end: 14 }], removed: [], outDurationSec: 5 });
+  const r = await run();
+  const m = r.metrics as Record<string, number>;
+  assert.ok(Math.abs(m.durationSec - 3) < 0.05, String(m.durationSec));
+  assert.ok(m.driftSec > 1.9);
+  assert.equal(r.status, "fail");
+});
+
+test("a very quiet voice fails with 'voice too quiet'", async () => {
+  ff("-f", "lavfi", "-i", "aevalsrc=0.001*sin(2*PI*220*t):d=4:s=48000", "-ac", "2", join(dir, "media", "clip.wav"));
+  await seed([{ start: 0, end: 4 }]);
+  const r = await run();
+  assert.equal(r.status, "fail");
+  assert.match(JSON.stringify(r), /voice too quiet/);
+});
+
+test("missing or audio-less music file gives a clear error", async () => {
+  makeVoice(join(dir, "media", "clip.wav"), 12);
+  await seed([{ start: 0, end: 2 }]);
+  const r1 = await run({ music: join(dir, "nope.wav") });
+  assert.match(JSON.stringify(r1), /existing file/);
+  ff("-f", "lavfi", "-i", "color=c=black:s=64x64:d=1:r=10", "-c:v", "libx264", join(dir, "silentvid.mp4"));
+  const r2 = await run({ music: join(dir, "silentvid.mp4") });
+  assert.match(JSON.stringify(r2), /no audio track/);
+});

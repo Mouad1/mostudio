@@ -1,13 +1,15 @@
-import { copyFile, mkdir, open, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { loudnormPass, measureLoudness, readJson, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
+import { loudnormPass, measureLoudness, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 
 const BATCH = 80;
 const RATE = 48000;
-const NEEDS = ["loudnorm", "sidechaincompress", "afade", "atrim", "concat", "amix", "asplit"];
+const NEEDS = ["loudnorm", "sidechaincompress", "afade", "atrim", "concat", "amix", "asplit", "alimiter", "acompressor", "highpass", "aresample", "aformat", "asetpts", "volume"];
 const PCM = ["-ar", String(RATE), "-ac", "2", "-c:a", "pcm_s16le"];
+const PCM_F = ["-ar", String(RATE), "-ac", "2", "-c:a", "pcm_f32le"];
+const MAX_GAIN_DB = 30;
 const BASE = ["-hide_banner", "-loglevel", "error", "-y"];
 const MIX_TIMEOUT_MS = 600_000;
 
@@ -24,7 +26,7 @@ export function concatLine(path: string): string {
 export function voiceGraph(keeps: Range[], fadeSec: number): string {
   const n = keeps.length;
   const tags = keeps.map((_, i) => `[s${i}]`).join("");
-  const parts = [`[0:a]aresample=${RATE},aformat=channel_layouts=stereo,asplit=${n}${tags}`];
+  const parts = [`[0:a]aresample=${RATE},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo,asplit=${n}${tags}`];
   keeps.forEach((k, i) => {
     const len = k.end - k.start;
     let f = `[s${i}]atrim=${t(k.start)}:${t(k.end)},asetpts=PTS-STARTPTS`;
@@ -75,16 +77,37 @@ export const mix: StepModule = {
     const target = num(ctx.params.targetLufs, -14);
     const music = typeof ctx.params.music === "string" && ctx.params.music ? ctx.params.music : undefined;
 
-    const ingest = await readJson<{ file: string; hasAudio?: boolean }>(join(ctx.projectDir, "media", "ingest.json"));
+    const ingest = await readJson<{ file: string; hasAudio?: boolean; durationSec?: number }>(join(ctx.projectDir, "media", "ingest.json"));
     if (!ingest?.file) throw new Error("media/ingest.json has no file");
     if (ingest.hasAudio === false) throw new Error("source has no audio track");
     const edl = await readJson<{ fadeSec?: number; keep: Range[]; outDurationSec: number }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep) || edl.keep.length === 0) throw new Error("cut/edl.json has no keep ranges");
     const fadeSec = num(edl.fadeSec, 0.01);
-    const outDur = edl.outDurationSec;
+    const srcDur = num(ingest.durationSec, 0);
+    let keeps = edl.keep;
+    if (srcDur > 0) {
+      const clamped = keeps.map((k) => ({ start: Math.min(k.start, srcDur), end: Math.min(k.end, srcDur) })).filter((k) => k.end - k.start > 1e-6);
+      if (clamped.length !== keeps.length || clamped.some((k, i) => k.end !== keeps[i]?.end)) {
+        ctx.log(`mix: clamped keep ranges to source duration ${srcDur}s`);
+      }
+      keeps = clamped;
+      if (keeps.length === 0) throw new Error("all keep ranges lie beyond the source duration");
+    }
+    const outDur = keeps.reduce((a, k) => a + k.end - k.start, 0);
     const source = join(ctx.projectDir, ingest.file);
 
     const ffmpeg = await resolveFfmpeg(ctx.env, NEEDS);
+    if (music) {
+      try {
+        if (!(await stat(music)).isFile()) throw new Error("not a file");
+      } catch {
+        throw new Error(`music file not found: ${music}`);
+      }
+      const probe = await runBin(resolveBin("ffprobe", ctx.env), ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", music]).catch(() => {
+        throw new Error(`music file is not readable media: ${music}`);
+      });
+      if (!probe.trim()) throw new Error(`music file has no audio track: ${music}`);
+    }
     const cache = join(ctx.projectDir, "cache", "mix");
     await rm(cache, { recursive: true, force: true });
     await mkdir(cache, { recursive: true });
@@ -93,10 +116,10 @@ export const mix: StepModule = {
     try {
       // voice: cut + fades, in batches so the filter graph stays small
       const batches: string[] = [];
-      for (let i = 0; i < edl.keep.length; i += BATCH) {
+      for (let i = 0; i < keeps.length; i += BATCH) {
         const file = join(cache, `batch-${String(batches.length).padStart(3, "0")}.wav`);
-        const graph = voiceGraph(edl.keep.slice(i, i + BATCH), fadeSec);
-        await runBin(ffmpeg, [...BASE, "-i", source, "-filter_complex", graph, "-map", "[out]", ...PCM, file], MIX_TIMEOUT_MS);
+        const graph = voiceGraph(keeps.slice(i, i + BATCH), fadeSec);
+        await runBin(ffmpeg, [...BASE, "-i", source, "-filter_complex", graph, "-map", "[out]", ...PCM_F, file], MIX_TIMEOUT_MS);
         batches.push(file);
       }
       const voice = join(cache, "voice.wav");
@@ -108,14 +131,14 @@ export const mix: StepModule = {
       const voiceP = join(cache, "voice-p.wav");
       await runBin(
         ffmpeg,
-        [...BASE, "-i", voice, "-af", "highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=120:makeup=2", ...PCM, voiceP],
+        [...BASE, "-i", voice, "-af", "highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=120:makeup=2", ...PCM_F, voiceP],
         MIX_TIMEOUT_MS,
       );
 
       // optional music, ducked under the voice (threshold relative to the voice loudness)
       let pre = voiceP;
       if (music) {
-        const iVoice = (await loudnormPass(voiceP, ctx.env, { target })).input_i;
+        const iVoice = (await loudnormPass(voiceP, ctx.env, {})).input_i;
         const threshold = Math.min(1, Math.max(0.000976563, 10 ** ((iVoice - 12) / 20)));
         pre = join(cache, "pre.wav");
         const graph = [
@@ -126,17 +149,18 @@ export const mix: StepModule = {
         ].join(";");
         await runBin(
           ffmpeg,
-          [...BASE, "-i", voiceP, "-stream_loop", "-1", "-i", music, "-filter_complex", graph, "-map", "[mixed]", "-t", t(outDur), ...PCM, pre],
+          [...BASE, "-i", voiceP, "-stream_loop", "-1", "-i", music, "-filter_complex", graph, "-map", "[mixed]", "-t", t(outDur), ...PCM_F, pre],
           MIX_TIMEOUT_MS,
         );
       }
 
       // deterministic loudness: measure, gain + sample-peak limiter, verify, retry once if short
-      const i0 = (await loudnormPass(pre, ctx.env, { target })).input_i;
+      const i0 = (await loudnormPass(pre, ctx.env, {})).input_i;
       const render = async (gainDb: number, out: string): Promise<void> => {
         const af = `volume=${gainDb.toFixed(3)}dB,alimiter=limit=0.708:attack=5:release=50:level=false`;
         await runBin(ffmpeg, [...BASE, "-i", pre, "-af", af, ...PCM, out], MIX_TIMEOUT_MS);
       };
+      if (target - i0 > MAX_GAIN_DB) throw new Error(`voice too quiet (I0 = ${round(i0, 1)} LUFS)`);
       let gain = target - i0;
       let passes = 1;
       let chosen = join(cache, "pass-1.wav");
@@ -144,6 +168,7 @@ export const mix: StepModule = {
       let got = await measureLoudness(chosen, ctx.env);
       if (got.integratedLufs < target - 0.5) {
         gain += target - got.integratedLufs;
+        if (gain > MAX_GAIN_DB) throw new Error(`voice too quiet (I0 = ${round(i0, 1)} LUFS)`);
         passes = 2;
         chosen = join(cache, "pass-2.wav");
         await render(gain, chosen);
@@ -158,7 +183,8 @@ export const mix: StepModule = {
         integratedLufs: round(got.integratedLufs, 1),
         truePeakDb: round(got.truePeakDb, 1),
         durationSec,
-        segments: edl.keep.length,
+        driftSec: round(Math.abs(durationSec - edl.outDurationSec), 3),
+        segments: keeps.length,
         batches: batches.length,
         passes,
         hasMusic: music !== undefined,
