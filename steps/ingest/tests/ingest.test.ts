@@ -112,3 +112,18 @@ test("ingest resolves ffprobe from ctx.env", async () => {
 test("unparseable ffprobe output names the binary", async () => {
   await assert.rejects(probe(clip, { FFPROBE: "/bin/echo" }), /\/bin\/echo returned invalid JSON/);
 });
+
+test("HLG-tagged clip records colorTransfer and hdr", async () => {
+  const f = await makeClip(join(tmp, "src"), { seconds: 1, width: 320, height: 180, audio: true, hlg: true, name: "hlg.mp4" });
+  const r = await runStep(dir, ingest, { params: { source: f }, ...base });
+  assert.equal(r.status, "pass");
+  assert.equal(r.metrics.hdr, true);
+  const j = JSON.parse(readFileSync(join(dir, "media", "ingest.json"), "utf8"));
+  assert.equal(j.colorTransfer, "arib-std-b67");
+  assert.equal(j.hdr, true);
+});
+
+test("SDR clip is not hdr", async () => {
+  const r = await runStep(dir, ingest, { params: { source: clip }, ...base });
+  assert.equal(r.metrics.hdr, false);
+});

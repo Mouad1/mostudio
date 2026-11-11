@@ -19,7 +19,10 @@ const NEEDS = ["trim", "setpts", "split", "fps", "tpad", "concat", "scale", "pad
 const SEEK_LEAD = 1;
 
 type Encoder = "h264_videotoolbox" | "libx264";
-type Ingest = { file: string; durationSec?: number; fps?: number; width?: number; height?: number; hasAudio?: boolean };
+type Ingest = { file: string; durationSec?: number; fps?: number; width?: number; height?: number; hasAudio?: boolean; hdr?: boolean; colorTransfer?: string };
+
+/** HLG/PQ -> SDR BT.709 (linear light, Hable curve), applied once in the CFR pass. */
+export const TONEMAP = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
 
 const round = (n: number, d: number): number => Math.round(n * 10 ** d) / 10 ** d;
 const t = (n: number): string => n.toFixed(6);
@@ -41,6 +44,27 @@ export async function resolveAssembleFfmpeg(env: Record<string, string | undefin
     const msg = err instanceof Error ? err.message : String(err);
     if (!needs.includes("ass")) throw err;
     throw new Error(`${msg}. Burning captions with ffmpeg needs libass: brew install ffmpeg-full (or use --param captionsRenderer=hyperframes)`);
+  }
+}
+
+/**
+ * ffmpeg for an HDR source: one that also has zscale + tonemap (toneMap true), else a build with only `needs`
+ * plus a warning: the render continues untone-mapped. `candidates` is for tests.
+ */
+export async function resolveHdrFfmpeg(
+  env: Record<string, string | undefined>,
+  needs: string[],
+  candidates?: string[],
+): Promise<{ ffmpeg: string; toneMap: boolean; warning?: string }> {
+  try {
+    return { ffmpeg: await resolveAssembleFfmpeg(env, [...needs, "zscale", "tonemap"], candidates), toneMap: true };
+  } catch {
+    const ffmpeg = await resolveAssembleFfmpeg(env, needs, candidates);
+    return {
+      ffmpeg,
+      toneMap: false,
+      warning: "warning: source is HDR but no ffmpeg build has zscale + tonemap; rendering without tone mapping (colours will look washed out). Install ffmpeg-full: brew install ffmpeg-full",
+    };
   }
 }
 
@@ -140,7 +164,17 @@ export const assemble: StepModule = {
       param: typeof p.captionsRenderer === "string" ? p.captionsRenderer : undefined,
     });
     if (renderer === "ass") await checkAssSize(join(ctx.projectDir, "captions", "captions.ass"), size.width, size.height);
-    const ffmpeg = await resolveAssembleFfmpeg(ctx.env, renderer === "ass" ? [...NEEDS, "ass"] : NEEDS);
+    const needs = renderer === "ass" ? [...NEEDS, "ass"] : NEEDS;
+    let ffmpeg: string;
+    let toneMap = false;
+    if (ingest.hdr === true) {
+      const hdr = await resolveHdrFfmpeg(ctx.env, needs);
+      ({ ffmpeg, toneMap } = hdr);
+      if (hdr.warning) ctx.log(`assemble: ${hdr.warning}`);
+      else ctx.log(`assemble: HDR source (${ingest.colorTransfer ?? "hdr"}): tone-mapping to SDR BT.709`);
+    } else {
+      ffmpeg = await resolveAssembleFfmpeg(ctx.env, needs);
+    }
     const encoder = await pickH264Encoder(ffmpeg, ctx.env);
     const ffprobe = resolveBin("ffprobe", ctx.env);
     const source = join(ctx.projectDir, ingest.file);
@@ -162,7 +196,7 @@ export const assemble: StepModule = {
       const lastEnd = Math.max(...keeps.map((k) => k.end));
       await runBin(
         ffmpeg,
-        [...BASE, "-i", source, "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", `setpts=PTS-${t(aOff)}/TB,fps=${fps}:start_time=0`, ...encodeArgs(encoder, false), "-t", t(lastEnd + 1), cfrFile],
+        [...BASE, "-i", source, "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", `setpts=PTS-${t(aOff)}/TB,fps=${fps}:start_time=0${toneMap ? `,${TONEMAP}` : ""}`, ...encodeArgs(encoder, false), "-t", t(lastEnd + 1), cfrFile],
         FF_TIMEOUT_MS,
       );
 
@@ -251,6 +285,7 @@ export const assemble: StepModule = {
         batches: batches.length,
         captionsBurned: renderer !== "none",
         captionsRenderer: renderer,
+        toneMapped: toneMap,
         encoder,
         renderSec: round((performance.now() - t0) / 1000, 1),
       };

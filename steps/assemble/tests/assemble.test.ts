@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
 import { resolveFfmpeg, runStep, writeJsonAtomic } from "../../../core/src/index.ts";
-import { assemble } from "../src/assemble.ts";
+import { assemble, resolveHdrFfmpeg } from "../src/assemble.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
 const registry: ProviderRegistry = {
@@ -40,7 +40,7 @@ const probe = (file: string, entries: string, stream = "v:0"): string =>
 type Keep = { start: number; end: number };
 
 /** Seed a project: source video (lavfi testsrc2 + tone), edl, mix.wav of the cut length, captions files. */
-async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number; h?: number; srcSec?: number; playRes?: [number, number] } = {}): Promise<number> {
+async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number; h?: number; srcSec?: number; playRes?: [number, number]; ingest?: Record<string, unknown> } = {}): Promise<number> {
   const w = opts.w ?? 320;
   const h = opts.h ?? 240;
   const srcSec = opts.srcSec ?? 10;
@@ -56,7 +56,7 @@ async function seed(dir: string, keep: Keep[], opts: { src?: string; w?: number;
     );
   }
   const out = Math.round(keep.reduce((a, k) => a + k.end - k.start, 0) * 1000) / 1000;
-  await writeJsonAtomic(join(dir, "media", "ingest.json"), { file, durationSec: srcSec, fps: 30, width: w, height: h, rotation: 0, hasAudio: true });
+  await writeJsonAtomic(join(dir, "media", "ingest.json"), { file, durationSec: srcSec, fps: 30, width: w, height: h, rotation: 0, hasAudio: true, ...opts.ingest });
   await writeJsonAtomic(join(dir, "cut", "edl.json"), { source: file, fadeSec: 0.01, keep, removed: [], outDurationSec: out });
   ff("-f", "lavfi", "-i", `sine=f=220:d=${out}:sample_rate=48000`, "-ac", "2", "-c:a", "pcm_s16le", join(dir, "audio", "mix.wav"));
   const ass = [
@@ -312,4 +312,36 @@ test("VFR gap before a batch keeps content in sync (held frame, flash at the rig
   const flash = [...luma].flatMap((v, i) => (v > 200 ? [i / 30] : []));
   assert.equal(flash.length, 1, `flash frames at ${flash}`);
   assert.ok(Math.abs((flash[0] ?? 0) - 1.5) <= 1 / 30 + 1e-6, `flash at ${flash[0]}`);
+});
+
+const zscaleFfmpeg = await resolveFfmpeg(process.env, ["zscale", "tonemap"]).catch(() => undefined);
+
+test("HDR (HLG) source is tone-mapped to SDR BT.709", { skip: zscaleFfmpeg ? false : "no ffmpeg build with zscale + tonemap" }, async () => {
+  const dir = await project("hdr");
+  const raw = join(root, "hlg-src.mp4");
+  execFileSync(zscaleFfmpeg as string, [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=4", "-f", "lavfi", "-i", "sine=f=440:d=4:sample_rate=48000",
+    "-vf", "setparams=color_trc=arib-std-b67:color_primaries=bt2020:colorspace=bt2020nc",
+    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-color_trc", "arib-std-b67", "-color_primaries", "bt2020", "-colorspace", "bt2020nc",
+    "-c:a", "aac", "-shortest", raw,
+  ]);
+  await seed(dir, [{ start: 0.5, end: 2.5 }], { src: raw, srcSec: 4, ingest: { hdr: true, colorTransfer: "arib-std-b67" } });
+  const logs: string[] = [];
+  const r = await run(dir, { burnCaptions: false }, process.env, (m) => logs.push(m));
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.toneMapped, true);
+  assert.equal(probe(join(dir, "renders", "final.mp4"), "stream=color_transfer"), "bt709");
+});
+
+test("HDR without zscale/tonemap falls back to a plain build with a warning", async () => {
+  // a fake ffmpeg whose -filters lists every base filter but not zscale
+  const bin = join(root, "fake-ffmpeg-nozscale.sh");
+  const names = ["trim", "setpts", "split", "fps", "tpad", "concat", "scale", "pad", "setsar", "tonemap"];
+  await writeFile(bin, `#!/bin/sh\nfor n in ${names.join(" ")}; do echo " ..C $n V->V x"; done\n`);
+  execFileSync("chmod", ["+x", bin]);
+  const got = await resolveHdrFfmpeg({}, ["trim", "fps"], [bin]);
+  assert.equal(got.ffmpeg, bin);
+  assert.equal(got.toneMap, false);
+  assert.match(got.warning ?? "", /HDR.*zscale/);
 });

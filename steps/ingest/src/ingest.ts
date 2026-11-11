@@ -39,6 +39,7 @@ export const ingest: StepModule = {
         height: info.height,
         rotation: info.rotation,
         hasAudio: info.hasAudio,
+        hdr: info.hdr,
         sha256: hash,
         sizeMB: Math.round((size / 1024 / 1024) * 100) / 100,
       },

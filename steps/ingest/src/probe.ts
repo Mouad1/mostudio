@@ -10,7 +10,13 @@ export type ProbeResult = {
   audioChannels: number;
   videoCodec: string;
   audioCodec?: string;
+  /** ffprobe's color_transfer of the video stream ("" when untagged). */
+  colorTransfer: string;
+  /** HLG (arib-std-b67) or PQ (smpte2084) transfer: assemble tone-maps to SDR BT.709. */
+  hdr: boolean;
 };
+
+const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"]);
 
 type Stream = {
   codec_type?: string;
@@ -21,6 +27,7 @@ type Stream = {
   duration?: string;
   avg_frame_rate?: string;
   r_frame_rate?: string;
+  color_transfer?: string;
   tags?: { rotate?: string };
   side_data_list?: Array<{ rotation?: number }>;
 };
@@ -70,6 +77,8 @@ export async function probe(file: string, env: Record<string, string | undefined
     hasAudio: audio !== undefined,
     audioChannels: audio?.channels ?? 0,
     videoCodec: video?.codec_name ?? "",
+    colorTransfer: video?.color_transfer ?? "",
+    hdr: HDR_TRANSFERS.has(video?.color_transfer ?? ""),
   };
   if (audio?.codec_name) result.audioCodec = audio.codec_name;
   return result;
