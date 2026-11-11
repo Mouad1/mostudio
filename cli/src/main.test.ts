@@ -403,3 +403,36 @@ test("approve exits 1 when the step has no passing result", async () => {
   assert.equal(await run(["approve", "captions", "--project", dir]), 1);
   assert.match(err(), /no passing result/);
 });
+
+test("run remembers --param across re-runs", async () => {
+  writeWf("wf-mem", { name: "wf-mem", steps: [{ step: "fake" }, { step: "captions", approve: true }] });
+  const dir = await newProject("run-mem");
+  reset();
+  assert.equal(await run(["run", "wf-mem", "--project", dir, "--param", "fake.n=4"]), 3);
+  reset();
+  assert.equal(await run(["approve", "captions", "--project", dir]), 0);
+  reset();
+  assert.equal(await run(["run", "wf-mem", "--project", dir]), 0);
+  assert.match(out(), /^fake .*a=4.*\(cached\)$/m);
+  assert.match(out(), /^wf-mem: done$/m);
+});
+
+test("run --json still prints output when a step throws unexpectedly", async () => {
+  const bad: StepModule = {
+    contract: { name: "bad", ...fakeContract },
+    run: async () => ({ metrics: {}, artifacts: [] }),
+  };
+  Object.defineProperty(bad.contract, "name", {
+    get() {
+      throw new Error("kaboom");
+    },
+  });
+  writeWf("wf-throw", { name: "wf-throw", steps: [{ step: "bad" }] });
+  const dir = await newProject("run-throw");
+  reset();
+  assert.equal(await main(["run", "wf-throw", "--project", dir, "--json"], mk(), { ...steps, bad }), 2);
+  const r = JSON.parse(out());
+  assert.equal(r.status, "failed");
+  assert.equal(r.stoppedAt, "bad");
+  assert.match(r.results[0].error, /kaboom/);
+});

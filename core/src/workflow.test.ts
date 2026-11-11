@@ -159,3 +159,59 @@ test("shipped workflows parse against the real step names", async () => {
     assert.equal(w.name, f);
   }
 });
+
+test("remembered params: later runs need no --param; passing again changes it", async () => {
+  const mods = { a: fake("a", { params: true }), b: fake("b") };
+  const w = wf([{ step: "a", params: { k: "wf", n: 1 } }, { step: "b" }]);
+  await runWorkflow(dir, w, mods, { ...base(), params: { a: { k: "cli" } } });
+  assert.deepEqual(seen.a, { k: "cli", n: 1 });
+  const r2 = await runWorkflow(dir, w, mods, base());
+  assert.equal(r2.results[0]?.cached, true);
+  assert.equal(calls.a, 1);
+  await runWorkflow(dir, w, mods, { ...base(), params: { a: { k: "new" } } });
+  assert.deepEqual(seen.a, { k: "new", n: 1 });
+  await runWorkflow(dir, w, mods, base());
+  assert.equal(calls.a, 2);
+});
+
+test("an unexpected throw ends the workflow as failed with a redacted message", async () => {
+  const bad = fake("a");
+  Object.defineProperty(bad.contract, "name", {
+    get() {
+      throw new Error("kaboom sekret-token-999");
+    },
+  });
+  const seenSteps: string[] = [];
+  const r = await runWorkflow(dir, wf([{ step: "a" }, { step: "b" }]), { a: bad, b: fake("b") }, {
+    ...base(),
+    env: { API_KEY: "sekret-token-999" },
+    onStep: (x) => seenSteps.push(x.step),
+  });
+  assert.equal(r.status, "failed");
+  assert.equal(r.stoppedAt, "a");
+  assert.match(r.results[0]?.error ?? "", /kaboom/);
+  assert.doesNotMatch(r.results[0]?.error ?? "", /sekret-token-999/);
+  assert.deepEqual(seenSteps, ["a"]);
+  assert.equal(calls.b, undefined);
+});
+
+test("force on an approve step clears its approval", async () => {
+  const mods = { a: fake("a"), b: fake("b") };
+  const w = wf([{ step: "a", approve: true }, { step: "b" }]);
+  await runWorkflow(dir, w, mods, base());
+  await approveStep(dir, "a");
+  assert.equal((await runWorkflow(dir, w, mods, base())).status, "done");
+  const r = await runWorkflow(dir, w, mods, { ...base(), force: ["a"] });
+  assert.equal(r.status, "awaiting-approval");
+  assert.equal(calls.a, 2);
+});
+
+test("a warn step mid-workflow does not stop later steps", async () => {
+  const warn: StepModule = {
+    contract: { name: "w", inputs: [], outputs: [], gate: [{ metric: "x", op: ">=", value: 5, level: "warn" }] },
+    run: async () => ({ metrics: { x: 1 }, artifacts: [] }),
+  };
+  const r = await runWorkflow(dir, wf([{ step: "w" }, { step: "b" }]), { w: warn, b: fake("b") }, base());
+  assert.equal(r.status, "done");
+  assert.deepEqual(r.results.map((x) => x.status), ["warn", "pass"]);
+});
