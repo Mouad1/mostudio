@@ -1,6 +1,6 @@
 {
   "name": "mix",
-  "version": "1",
+  "version": "2",
   "inputs": ["media/ingest.json", "cut/edl.json"],
   "outputs": ["audio/mix.wav"],
   "params": { "music": "string?", "musicDb": "number?", "targetLufs": "number?" },

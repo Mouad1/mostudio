@@ -170,6 +170,28 @@ test("keeps beyond the source are clamped and drift is reported", async () => {
   assert.ok(Math.abs(m.durationSec - 3) < 0.05, String(m.durationSec));
   assert.ok(m.driftSec > 1.9);
   assert.equal(r.status, "fail");
+  assert.equal(r.metrics.clamped, true);
+  assert.match(r.error ?? "", /clamped/);
+  assert.match(r.error ?? "", /re-run cut/);
+});
+
+test("mix clamps to the edl's sourceDurationSec when it is shorter than ingest", async () => {
+  makeVoice(join(dir, "media", "clip.wav"), 12);
+  await writeJsonAtomic(join(dir, "media", "ingest.json"), { file: "media/clip.wav", durationSec: 12, hasAudio: true });
+  await writeJsonAtomic(join(dir, "cut", "edl.json"), {
+    source: "media/clip.wav", fadeSec: 0.01, keep: [{ start: 0, end: 2 }, { start: 8, end: 11 }], removed: [], outDurationSec: 4, sourceDurationSec: 10,
+  });
+  const r = await run();
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.clamped, true);
+  assert.ok(Math.abs((r.metrics.durationSec as number) - 4) < 0.05, String(r.metrics.durationSec));
+});
+
+test("unclamped mix reports clamped false", async () => {
+  makeVoice(join(dir, "media", "clip.wav"), 12);
+  await seed([{ start: 1, end: 3 }]);
+  const r = await run();
+  assert.equal(r.metrics.clamped, false);
 });
 
 test("a very quiet voice fails with 'voice too quiet'", async () => {

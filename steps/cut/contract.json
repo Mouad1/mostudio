@@ -1,6 +1,6 @@
 {
   "name": "cut",
-  "version": "2",
+  "version": "3",
   "inputs": [
     "media/ingest.json",
     "transcript/words.json",

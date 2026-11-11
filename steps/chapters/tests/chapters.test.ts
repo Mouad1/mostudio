@@ -184,3 +184,15 @@ test("empty cut transcript skips the model and gives one fallback chapter", asyn
   assert.equal(r.metrics.fallback, true);
   assert.equal(r.metrics.firstAtZero, true);
 });
+
+test("chapters use the clamped duration (edl sourceDurationSec) like mix and assemble", async () => {
+  await seed(talk(10), [{ start: 0, end: 20 }, { start: 25, end: 40 }]);
+  // outDurationSec says 35 s, but the source ends at 30 s: the real cut is 25 s (< 30 s -> one chapter, no model call)
+  const edlPath = join(dir, "cut", "edl.json");
+  const edl = JSON.parse(await readFile(edlPath, "utf8"));
+  await writeJsonAtomic(edlPath, { ...edl, sourceDurationSec: 30 });
+  fakeLlm({});
+  const r = await run(["gem"]);
+  assert.equal(r.metrics.chapterCount, 1);
+  assert.equal(bodies.length, 0);
+});

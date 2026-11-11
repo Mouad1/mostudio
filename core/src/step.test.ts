@@ -540,3 +540,18 @@ test("optional fileParam absent is not required", async () => {
   assert.equal(r.status, "pass");
   assert.equal(r.cached, false);
 });
+
+test("failNote becomes the error of a gate-failed result only", async () => {
+  const mk = (n: number): StepModule => ({
+    contract: { name: "noted", inputs: [], outputs: [], gate: [{ metric: "n", op: ">=", value: 1, level: "fail" }] },
+    async run() {
+      return { metrics: { n }, artifacts: [], failNote: "n is low because the input was clamped" };
+    },
+  });
+  const bad = await runStep(dir, mk(0), { ...base(), force: true });
+  assert.equal(bad.status, "fail");
+  assert.equal(bad.error, "n is low because the input was clamped");
+  const good = await runStep(dir, mk(2), { ...base(), force: true });
+  assert.equal(good.status, "pass");
+  assert.equal(good.error, undefined);
+});

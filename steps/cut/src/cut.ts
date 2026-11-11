@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { keepDuration, normalizeWordTimings, readJson, rmsEnvelope, writeJsonAtomic } from "../../../core/src/index.ts";
+import { durationBound, keepDuration, normalizeWordTimings, readJson, rmsEnvelope, wavDuration, writeJsonAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import fillers from "../fillers.json" with { type: "json" };
@@ -42,8 +42,11 @@ export const cut: StepModule = {
     const words = normalizeWordTimings(raw); // transcribe v2 already writes normalized words; this covers older words.json
     if (words.length === 0) throw new Error("no words in transcript/words.json: nothing to cut (is the clip silent or music-only?)");
 
-    const env = await rmsEnvelope(join(ctx.projectDir, "transcript", "audio.wav"), WINDOW_MS);
-    const durationSec = ingest.durationSec > 0 ? ingest.durationSec : round3((env.length * WINDOW_MS) / 1000);
+    const wav = join(ctx.projectDir, "transcript", "audio.wav");
+    const env = await rmsEnvelope(wav, WINDOW_MS);
+    // the usable source is the shorter of the container and its audio (a video track can outlast the audio)
+    const bound = durationBound(ingest.durationSec, await wavDuration(wav));
+    const durationSec = round3(Number.isFinite(bound) ? bound : (env.length * WINDOW_MS) / 1000);
 
     const fillerIdx = new Set(fillerWords(words, fillers as FillerList));
     const retakeIdx = new Set<number>();
@@ -94,6 +97,7 @@ export const cut: StepModule = {
       keep,
       removed,
       outDurationSec,
+      sourceDurationSec: durationSec,
     });
 
     const removedPct = Math.round(100 * (1 - keepDuration(keep) / durationSec) * 10) / 10;

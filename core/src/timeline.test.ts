@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Word } from "./providers/openai-compat.ts";
-import { keepDuration, mapToCut, normalizeWordTimings } from "./timeline.ts";
+import { clampKeeps, durationBound, keepDuration, mapToCut, normalizeWordTimings } from "./timeline.ts";
 
 const W = (w: string, start: number, end: number): Word => ({ w, start, end });
 
@@ -44,4 +44,17 @@ test("normalizeWordTimings passes untimed words through without poisoning the re
   const n = normalizeWordTimings([W("a", 1, 2), W("b", Number.NaN, Number.NaN), W("c", 1.5, 3)]);
   assert.ok(Number.isNaN(n[1]?.start));
   assert.deepEqual(n[2], W("c", 2, 3));
+});
+
+test("durationBound is the smallest positive finite value", () => {
+  assert.equal(durationBound(10, 9.5, undefined, 0, Number.NaN), 9.5);
+  assert.equal(durationBound(undefined, 0), Infinity);
+});
+
+test("clampKeeps cuts ranges at the bound and reports changes", () => {
+  assert.deepEqual(clampKeeps([{ start: 0, end: 2 }, { start: 4, end: 6 }, { start: 7, end: 8 }], 5), {
+    keep: [{ start: 0, end: 2 }, { start: 4, end: 5 }],
+    clamped: true,
+  });
+  assert.deepEqual(clampKeeps([{ start: 0, end: 2 }], Infinity), { keep: [{ start: 0, end: 2 }], clamped: false });
 });

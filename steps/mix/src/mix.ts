@@ -1,6 +1,17 @@
-import { copyFile, mkdir, open, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { loudnormPass, measureLoudness, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
+import {
+  clampKeeps,
+  durationBound,
+  loudnormPass,
+  measureLoudness,
+  readJson,
+  resolveBin,
+  resolveFfmpeg,
+  runBin,
+  wavDuration,
+  writeOutputAtomic,
+} from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 
@@ -39,37 +50,6 @@ export function voiceGraph(keeps: Range[], fadeSec: number): string {
   return parts.join(";");
 }
 
-/** Duration of a PCM WAV from its header (the file must be seekable-written, as ffmpeg does). */
-async function wavDuration(path: string): Promise<number> {
-  const fh = await open(path, "r");
-  try {
-    const size = (await fh.stat()).size;
-    const head = Buffer.alloc(12);
-    await fh.read(head, 0, 12, 0);
-    let rate = 0;
-    let frame = 0;
-    const ch = Buffer.alloc(8);
-    for (let pos = 12; pos + 8 <= size; ) {
-      await fh.read(ch, 0, 8, pos);
-      const id = ch.toString("ascii", 0, 4);
-      const len = ch.readUInt32LE(4);
-      if (id === "fmt ") {
-        const b = Buffer.alloc(16);
-        await fh.read(b, 0, 16, pos + 8);
-        rate = b.readUInt32LE(4);
-        frame = b.readUInt16LE(12);
-      } else if (id === "data") {
-        if (!rate || !frame) throw new Error(`${path}: WAV data before fmt`);
-        return Math.min(len, size - pos - 8) / frame / rate;
-      }
-      pos += 8 + len + (len % 2);
-    }
-    throw new Error(`${path}: WAV has no data chunk`);
-  } finally {
-    await fh.close();
-  }
-}
-
 export const mix: StepModule = {
   contract: contract as StepContract,
   async run(ctx) {
@@ -80,19 +60,14 @@ export const mix: StepModule = {
     const ingest = await readJson<{ file: string; hasAudio?: boolean; durationSec?: number }>(join(ctx.projectDir, "media", "ingest.json"));
     if (!ingest?.file) throw new Error("media/ingest.json has no file");
     if (ingest.hasAudio === false) throw new Error("source has no audio track");
-    const edl = await readJson<{ fadeSec?: number; keep: Range[]; outDurationSec: number }>(join(ctx.projectDir, "cut", "edl.json"));
+    const edl = await readJson<{ fadeSec?: number; keep: Range[]; outDurationSec: number; sourceDurationSec?: number }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep) || edl.keep.length === 0) throw new Error("cut/edl.json has no keep ranges");
     const fadeSec = num(edl.fadeSec, 0.01);
-    const srcDur = num(ingest.durationSec, 0);
-    let keeps = edl.keep;
-    if (srcDur > 0) {
-      const clamped = keeps.map((k) => ({ start: Math.min(k.start, srcDur), end: Math.min(k.end, srcDur) })).filter((k) => k.end - k.start > 1e-6);
-      if (clamped.length !== keeps.length || clamped.some((k, i) => k.end !== keeps[i]?.end)) {
-        ctx.log(`mix: clamped keep ranges to source duration ${srcDur}s`);
-      }
-      keeps = clamped;
-      if (keeps.length === 0) throw new Error("all keep ranges lie beyond the source duration");
-    }
+    // same bound as cut (shorter of container and audio track), so audio, video and chapters agree
+    const bound = durationBound(ingest.durationSec, edl.sourceDurationSec);
+    const { keep: keeps, clamped } = clampKeeps(edl.keep, bound);
+    if (clamped) ctx.log(`mix: clamped keep ranges to source duration ${bound}s`);
+    if (keeps.length === 0) throw new Error("all keep ranges lie beyond the source duration");
     const outDur = keeps.reduce((a, k) => a + k.end - k.start, 0);
     const source = join(ctx.projectDir, ingest.file);
 
@@ -188,9 +163,18 @@ export const mix: StepModule = {
         batches: batches.length,
         passes,
         hasMusic: music !== undefined,
+        clamped,
       };
       ctx.log(`mix: ${metrics.segments} segments, ${metrics.integratedLufs} LUFS, ${metrics.truePeakDb} dBTP, ${durationSec}s${music ? " + music" : ""}`);
-      return { metrics, artifacts: ["audio/mix.wav"] };
+      return {
+        metrics,
+        artifacts: ["audio/mix.wav"],
+        ...(clamped
+          ? {
+              failNote: `keep ranges were clamped to the source duration ${round(bound, 3)}s, so the mix is ${durationSec}s while cut/edl.json expects ${edl.outDurationSec}s; re-run cut (mostudio step cut --force) so the edl matches the source`,
+            }
+          : {}),
+      };
     } finally {
       await rm(cache, { recursive: true, force: true });
     }

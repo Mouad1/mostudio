@@ -42,6 +42,8 @@ export type StepOutput = {
   artifacts: string[];
   provider?: { id: string; model: string };
   quota?: Record<string, number>;
+  /** Explanation stored as the result's error when the gate fails (e.g. why a metric is off). */
+  failNote?: string;
 };
 
 export type StepModule = {
@@ -314,6 +316,7 @@ export async function runStep(
         artifacts: out.artifacts,
         ...withProvider(out.provider ?? lastPicked),
         ...(out.quota ? { quota: out.quota } : {}),
+        ...(gate.status === "fail" && out.failNote ? { error: message(new Error(out.failNote)) } : {}),
       });
     }
   } catch (err) {

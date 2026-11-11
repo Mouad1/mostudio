@@ -134,3 +134,15 @@ test("real Groq transcript with a word starting before its predecessor: no mid-w
     assert.equal(r.metrics.droppedWords, 0, pace);
   }
 });
+
+test("duration bound is the shorter of ingest and transcript/audio.wav", async () => {
+  sineSilenceSine(join(dir, "transcript", "audio.wav")); // 5.5 s of audio
+  // ingest claims 9 s (video longer than its audio track); the last word runs to the audio end
+  await seed([{ w: "one", start: 0.2, end: 1.8 }, { w: "two", start: 3.6, end: 5.45 }], 9);
+  const r = await run({ post: 0.5 });
+  assert.notEqual(r.status, "fail", JSON.stringify(r));
+  const edl = JSON.parse(await readFile(join(dir, "cut", "edl.json"), "utf8"));
+  assert.equal(edl.sourceDurationSec, 5.5);
+  assert.ok(edl.keep.every((k: { end: number }) => k.end <= 5.5), JSON.stringify(edl.keep));
+  assert.ok(edl.removed.every((g: { end: number }) => g.end <= 5.5), JSON.stringify(edl.removed));
+});

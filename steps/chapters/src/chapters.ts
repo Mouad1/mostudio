@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { chatComplete, mapToCut, NoProviderError, normalizeWordTimings, readJson, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
+import { chatComplete, clampKeeps, durationBound, keepDuration, mapToCut, NoProviderError, normalizeWordTimings, readJson, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildMessages, buildTranscript, mmss } from "./prompt.ts";
@@ -137,12 +137,14 @@ export const chapters: StepModule = {
   contract: contract as StepContract,
   async run(ctx) {
     const tr = await readJson<{ language?: string; words: Word[] }>(join(ctx.projectDir, "transcript", "words.json"));
-    const edl = await readJson<{ keep: Range[]; outDurationSec: number }>(join(ctx.projectDir, "cut", "edl.json"));
+    const edl = await readJson<{ keep: Range[]; outDurationSec: number; sourceDurationSec?: number }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep)) throw new Error("cut/edl.json has no keep list");
-    const outDur = edl.outDurationSec;
+    // same clamp as mix/assemble: chapter times must fit the rendered length
+    const keep = clampKeeps(edl.keep, durationBound(edl.sourceDurationSec)).keep;
+    const outDur = Math.min(durationBound(edl.outDurationSec), keepDuration(keep));
     // words.json from transcribe v2 is already normalized; this covers older files
     const source = normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
-    const words = toCut(source, edl.keep);
+    const words = toCut(source, keep);
     const language = typeof ctx.params.language === "string" && ctx.params.language !== "" ? ctx.params.language : undefined;
     const prefer = typeof ctx.params.prefer === "string" && ctx.params.prefer !== "" ? ctx.params.prefer : undefined;
 

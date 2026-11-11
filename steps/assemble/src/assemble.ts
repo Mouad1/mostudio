@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, sep } from "node:path";
-import { pickH264Encoder, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
+import { clampKeeps, durationBound, pickH264Encoder, readJson, resolveBin, resolveFfmpeg, runBin, writeOutputAtomic } from "../../../core/src/index.ts";
 import type { Range, StepContract, StepModule } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { batchGraph, escapeFilterPath, frameCounts, presetFilter } from "./filters.ts";
@@ -144,14 +144,11 @@ export const assemble: StepModule = {
     const ingest = await readJson<Ingest>(join(ctx.projectDir, "media", "ingest.json"));
     if (!ingest?.file) throw new Error("media/ingest.json has no file");
     if (!ingest.width || !ingest.height || !ingest.fps) throw new Error("media/ingest.json needs width, height and fps");
-    const edl = await readJson<{ keep: Range[]; outDurationSec: number }>(join(ctx.projectDir, "cut", "edl.json"));
+    const edl = await readJson<{ keep: Range[]; outDurationSec: number; sourceDurationSec?: number }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep) || edl.keep.length === 0) throw new Error("cut/edl.json has no keep ranges");
 
     // same clamp as mix, so the video cut matches audio/mix.wav
-    const srcDur = typeof ingest.durationSec === "number" && ingest.durationSec > 0 ? ingest.durationSec : Infinity;
-    const keeps = edl.keep
-      .map((k) => ({ start: Math.min(k.start, srcDur), end: Math.min(k.end, srcDur) }))
-      .filter((k) => k.end - k.start > 1e-6);
+    const { keep: keeps } = clampKeeps(edl.keep, durationBound(ingest.durationSec, edl.sourceDurationSec));
     if (keeps.length === 0) throw new Error("all keep ranges lie beyond the source duration");
     const outDur = keeps.reduce((a, k) => a + k.end - k.start, 0);
 
