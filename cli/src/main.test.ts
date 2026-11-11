@@ -435,4 +435,25 @@ test("run --json still prints output when a step throws unexpectedly", async () 
   assert.equal(r.status, "failed");
   assert.equal(r.stoppedAt, "bad");
   assert.match(r.results[0].error, /kaboom/);
+  reset();
+  assert.equal(await main(["status", "--project", dir, "--json"], mk(), steps), 0);
+  assert.equal(JSON.parse(out()).bad.status, "fail");
+  reset();
+  assert.equal(await run(["approve", "bad", "--project", dir]), 1);
+  assert.match(err(), /no passing result/);
+});
+
+test("run: invalid --param exits 64 naming step and key, persists nothing; empty value forgets", async () => {
+  writeWf("wf-val", { name: "wf-val", steps: [{ step: "fake", params: { n: 1 } }] });
+  const dir = await newProject("run-validate");
+  reset();
+  assert.equal(await run(["run", "wf-val", "--project", dir, "--param", "fake.m=2"]), 64);
+  assert.match(err(), /step "fake".*undeclared params: m/);
+  assert.equal(existsSync(join(dir, "steps", "workflow-params.json")), false);
+  reset();
+  assert.equal(await run(["run", "wf-val", "--project", dir, "--param", "fake.n=8"]), 0);
+  assert.match(out(), /a=8/);
+  reset();
+  assert.equal(await run(["run", "wf-val", "--project", dir, "--param", "fake.n="]), 0);
+  assert.match(out(), /a=1/);
 });

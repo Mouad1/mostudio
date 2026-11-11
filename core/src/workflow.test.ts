@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
+import { latest, readLedger } from "./ledger.ts";
 import type { Config } from "./config.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { StepModule } from "./step.ts";
@@ -193,6 +195,11 @@ test("an unexpected throw ends the workflow as failed with a redacted message", 
   assert.doesNotMatch(r.results[0]?.error ?? "", /sekret-token-999/);
   assert.deepEqual(seenSteps, ["a"]);
   assert.equal(calls.b, undefined);
+  const rec = latest(await readLedger(dir), "a");
+  assert.equal(rec?.status, "fail");
+  assert.equal(rec?.inputsHash, "");
+  assert.doesNotMatch(rec?.error ?? "", /sekret-token-999/);
+  await assert.rejects(approveStep(dir, "a"), /no passing result/);
 });
 
 test("force on an approve step clears its approval", async () => {
@@ -214,4 +221,27 @@ test("a warn step mid-workflow does not stop later steps", async () => {
   const r = await runWorkflow(dir, wf([{ step: "w" }, { step: "b" }]), { w: warn, b: fake("b") }, base());
   assert.equal(r.status, "done");
   assert.deepEqual(r.results.map((x) => x.status), ["warn", "pass"]);
+});
+
+test("invalid --param is rejected before anything is persisted", async () => {
+  const mods = { a: fake("a", { params: true }) };
+  const w = wf([{ step: "a" }]);
+  await assert.rejects(runWorkflow(dir, w, mods, { ...base(), params: { a: { typo: "x" } } }), /step "a".*undeclared params: typo/);
+  await assert.rejects(runWorkflow(dir, w, mods, { ...base(), params: { a: { n: "abc" } } }), /must be a number/);
+  await assert.rejects(runWorkflow(dir, w, mods, { ...base(), params: { zzz: { k: "x" } } }), /unknown step "zzz"/);
+  assert.equal(existsSync(join(dir, "steps", "workflow-params.json")), false);
+  assert.equal(calls.a, undefined);
+});
+
+test("empty --param value forgets the remembered key", async () => {
+  const mods = { a: fake("a", { params: true }) };
+  const w = wf([{ step: "a", params: { n: 1 } }]);
+  await runWorkflow(dir, w, mods, { ...base(), params: { a: { k: "mine" } } });
+  assert.deepEqual(seen.a, { k: "mine", n: 1 });
+  await runWorkflow(dir, w, mods, { ...base(), params: { a: { k: "" } } });
+  assert.deepEqual(seen.a, { n: 1 });
+  await runWorkflow(dir, w, mods, base());
+  assert.deepEqual(seen.a, { n: 1 });
+  const saved = JSON.parse(await readFile(join(dir, "steps", "workflow-params.json"), "utf8"));
+  assert.deepEqual(saved, {});
 });

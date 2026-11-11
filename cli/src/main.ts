@@ -13,6 +13,7 @@ import {
   parseWorkflow,
   runStep,
   runWorkflow,
+  WorkflowParamError,
   approveStep,
 } from "../../core/src/index.ts";
 import type { ProviderEntry, StepModule, StepResult } from "../../core/src/index.ts";
@@ -297,7 +298,7 @@ export async function main(
     if (command === "approve") return await cmdApprove(p, io);
     return await cmdStatus(p, io);
   } catch (err) {
-    if (err instanceof UsageError) {
+    if (err instanceof UsageError || err instanceof WorkflowParamError) {
       io.stderr(`${err.message}\n${USAGE}`);
       return 64;
     }

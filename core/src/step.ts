@@ -72,6 +72,7 @@ async function isFile(path: string): Promise<boolean> {
 function resolveParams(
   declared: Record<string, ParamType>,
   given: Record<string, unknown>,
+  partial = false,
 ): Record<string, unknown> {
   const extras = Object.keys(given).filter((k) => !(k in declared));
   if (extras.length) throw new Error(`undeclared params: ${extras.join(", ")}`);
@@ -81,7 +82,7 @@ function resolveParams(
     const type = optional ? declaredType.slice(0, -1) : declaredType;
     let value = given[key];
     if (value === undefined) {
-      if (optional) continue;
+      if (optional || partial) continue;
       throw new Error(`missing param: ${key}`);
     }
     if (type === "number" && typeof value === "string") {
@@ -98,6 +99,11 @@ function resolveParams(
     out[key] = value;
   }
   return out;
+}
+
+/** Check only the given params (names, types) against a contract; absent required params are fine. */
+export function checkParams(declared: Record<string, ParamType> | undefined, given: Record<string, unknown>): void {
+  resolveParams(declared ?? {}, given, true);
 }
 
 const OPS = new Set(["<", "<=", ">", ">=", "==", "between"]);

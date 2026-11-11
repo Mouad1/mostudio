@@ -1,9 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { readJson, writeJsonAtomic } from "./fs/atomic.ts";
-import { latest, readLedger } from "./ledger.ts";
+import { latest, readLedger, recordStep } from "./ledger.ts";
 import { createRedactor } from "./redact.ts";
-import { runStep } from "./step.ts";
+import { checkParams, runStep } from "./step.ts";
 import type { RunStepOptions, StepModule } from "./step.ts";
 import type { StepResult, Threshold } from "./types.ts";
 
@@ -26,6 +26,9 @@ export type RunWorkflowOptions = Omit<RunStepOptions, "params" | "force" | "gate
   /** Called as each step completes. */
   onStep?: (result: StepResult & { cached: boolean }) => void;
 };
+
+/** A --param naming an unknown step/key or a bad value; nothing is persisted. */
+export class WorkflowParamError extends Error {}
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -91,10 +94,27 @@ export async function runWorkflow(
   const { params: cliParams, force, onStep, ...rest } = opts;
   const results: WorkflowResult["results"] = [];
   const redactor = createRedactor([process.env, rest.env]);
-  // Remembered params: workflow file < persisted < this call's params. Passing a param again changes it.
+  // Validate before persisting: a typo must not be remembered.
+  for (const [step, p] of Object.entries(cliParams ?? {})) {
+    const mod = Object.hasOwn(steps, step) ? steps[step] : undefined;
+    if (!mod) throw new WorkflowParamError(`--param: unknown step "${step}"`);
+    const given = Object.fromEntries(Object.entries(p).filter(([, v]) => v !== ""));
+    try {
+      checkParams(mod.contract.params, given);
+    } catch (err) {
+      throw new WorkflowParamError(`--param for step "${step}": ${(err as Error).message}`);
+    }
+  }
+  // Remembered params: workflow file < persisted < this call's params. Passing a param again changes it;
+  // an empty value forgets the remembered key.
   const persisted = await readParams(projectDir);
   const remembered: StepParams = { ...persisted };
-  for (const [step, p] of Object.entries(cliParams ?? {})) remembered[step] = { ...persisted[step], ...p };
+  for (const [step, p] of Object.entries(cliParams ?? {})) {
+    const merged = { ...persisted[step], ...p };
+    for (const [k, v] of Object.entries(merged)) if (v === "") delete merged[k];
+    if (Object.keys(merged).length > 0) remembered[step] = merged;
+    else delete remembered[step];
+  }
   if (Object.keys(cliParams ?? {}).length > 0) {
     await mkdir(join(projectDir, "steps"), { recursive: true });
     await writeJsonAtomic(paramsPath(projectDir), remembered);
@@ -133,6 +153,12 @@ export async function runWorkflow(
         error: redactor.redact(err instanceof Error ? err.message : String(err)),
         cached: false,
       };
+      try {
+        await mkdir(join(projectDir, "steps"), { recursive: true });
+        await recordStep(projectDir, result);
+      } catch {
+        // The ledger write is best-effort here; the failure is still returned to the caller.
+      }
     }
     results.push(result);
     onStep?.(result);

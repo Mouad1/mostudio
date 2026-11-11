@@ -27,7 +27,7 @@ mostudio approve captions --project projects/<slug>
 
 A step with `"approve": true` pauses the run (exit 3) after it succeeds. Review its outputs (for captions: `captions/captions.txt`, fixes go in `edits/replacements.txt`), re-run the same command, then `mostudio approve <step>`; the next run continues. Approval is tied to the step's input hash, so changing its inputs asks again. `--param` overrides the workflow's own params for that step. Exit codes: 0 done, 2 failed, 3 awaiting approval, 64 usage error.
 
-`--param` values are remembered per project (`steps/workflow-params.json`), so re-runs resume without repeating them (e.g. `ingest.source`); to change one, pass it again. `--force <step>` on an approval step also clears its approval. State files such as `steps/approvals.json` have no lock: don't run two commands on the same project at once.
+`--param` values are remembered per project (`steps/workflow-params.json`), so re-runs resume without repeating them (e.g. `ingest.source`); to change one, pass it again, and to forget one pass an empty value (`--param ingest.source=`). Params are validated against the step's contract before being remembered; a typo exits 64 and saves nothing. `--force <step>` on an approval step also clears its approval. State files such as `steps/approvals.json` have no lock: don't run two commands on the same project at once.
 
 ## Test
 
