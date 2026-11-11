@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
 import { runStep } from "../../../core/src/index.ts";
-import { qa } from "../src/qa.ts";
+import { parseBlackStart, parseSilentStart, qa } from "../src/qa.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
 const registry: ProviderRegistry = {
@@ -89,4 +89,39 @@ test("video shorter than 2 s still runs", async () => {
   const r = await run();
   assert.equal(m(r).contactSheetFrames, 12);
   assert.equal(m(r).blackStartSec, 0);
+});
+
+test("video-only render fails cleanly with hasAudio false", async () => {
+  ff("-f", "lavfi", "-i", "testsrc2=s=320x180:r=25:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", join(dir, "renders", "final.mp4"));
+  const r = await run();
+  assert.equal(r.status, "fail", JSON.stringify(r));
+  const x = r.metrics as Record<string, number | boolean>;
+  assert.equal(x.hasAudio, false);
+  assert.equal(x.silentStartSec, 1);
+  assert.equal(x.integratedLufs, -70);
+  assert.ok((await readFile(join(dir, "renders", "qa.md"), "utf8")).includes("no audio track"));
+});
+
+test("digitally silent audio fails with -70 LUFS and does not throw", async () => {
+  ff("-f", "lavfi", "-i", "testsrc2=s=320x180:r=25:d=3", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", join(dir, "renders", "final.mp4"));
+  const r = await run();
+  assert.equal(r.status, "fail", JSON.stringify(r));
+  const x = r.metrics as Record<string, number | boolean>;
+  assert.equal(x.hasAudio, true);
+  assert.equal(x.integratedLufs, -70);
+  assert.equal(x.truePeakDb, -70);
+  assert.ok((await readFile(join(dir, "renders", "qa.md"), "utf8")).includes("digitally silent"));
+});
+
+test("parseBlackStart / parseSilentStart pick the run that starts at 0 among several", () => {
+  const black = "[blackdetect @ 0x1] black_start:0 black_end:0.52 black_duration:0.52\n[blackdetect @ 0x1] black_start:1.2 black_end:1.5 black_duration:0.3";
+  assert.equal(parseBlackStart(black, 2), 0.52);
+  assert.equal(parseBlackStart("[blackdetect @ 0x1] black_start:1.2 black_end:1.5 black_duration:0.3", 2), 0);
+  assert.equal(parseBlackStart("[blackdetect @ 0x1] black_start:0 black_end:2 black_duration:2\n[blackdetect @ 0x1] black_start:5 black_end:6", 2), 2);
+  assert.equal(parseBlackStart("", 2), 0);
+  const sil = "[silencedetect @ 0x1] silence_start: 0\n[silencedetect @ 0x1] silence_end: 0.8 | silence_duration: 0.8\n[silencedetect @ 0x1] silence_start: 0.9";
+  assert.equal(parseSilentStart(sil, 1), 0.8);
+  assert.equal(parseSilentStart("[silencedetect @ 0x1] silence_start: 0.6", 1), 0);
+  assert.equal(parseSilentStart("[silencedetect @ 0x1] silence_start: 0", 1), 1);
+  assert.equal(parseSilentStart("[silencedetect @ 0x1] silence_start: 0\n[silencedetect @ 0x1] silence_end: 3.2 | silence_duration: 3.2", 1), 1);
 });

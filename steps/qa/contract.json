@@ -6,6 +6,7 @@
   "params": {},
   "private": true,
   "gate": [
+    { "metric": "hasAudio", "op": "==", "value": true, "level": "fail" },
     { "metric": "blackStartSec", "op": "<=", "value": 0.1, "level": "fail" },
     { "metric": "silentStartSec", "op": "<=", "value": 0.5, "level": "fail" },
     { "metric": "integratedLufs", "op": "between", "value": [-15, -13], "level": "warn" }

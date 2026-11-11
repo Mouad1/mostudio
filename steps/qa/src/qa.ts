@@ -10,6 +10,7 @@ const SILENCE_WINDOW_SEC = 1;
 /** A run counts as "at the start" when it begins within this many seconds of 0. */
 const START_TOLERANCE_SEC = 0.05;
 const NEEDS = ["blackdetect", "silencedetect", "fps", "tpad", "scale", "tile"];
+const SILENT_DB = -70;
 const BASE = ["-hide_banner", "-nostats", "-y"];
 const QA_TIMEOUT_MS = 600_000;
 
@@ -36,7 +37,7 @@ export function parseSilentStart(stderr: string, windowSec: number): number {
 type Level = "pass" | "warn" | "fail";
 
 /** Verdict of one gate metric: its threshold's level when it misses, else pass. */
-function level(metrics: Record<string, number>, metric: string): Level {
+function level(metrics: Record<string, number | boolean>, metric: string): Level {
   const t = (contract.gate as Threshold[]).filter((g) => g.metric === metric);
   const { verdicts } = evaluateGate(metrics, t);
   const bad = verdicts.find((v) => !v.ok);
@@ -48,7 +49,9 @@ export function reportMarkdown(info: {
   durationSec: number;
   width: number;
   height: number;
-  metrics: Record<string, number>;
+  hasAudio: boolean;
+  silentAudio: boolean;
+  metrics: Record<string, number | boolean>;
 }): string {
   const { metrics: m } = info;
   const row = (name: string, metric: string, unit: string): string =>
@@ -69,6 +72,11 @@ export function reportMarkdown(info: {
     row("Integrated loudness (integratedLufs)", "integratedLufs", " LUFS"),
     `| True peak (truePeakDb) | ${m.truePeakDb} dBTP | info |`,
     "",
+    ...(!info.hasAudio
+      ? ["> FAIL: the render has no audio track. Silent opening and loudness are reported as worst case (-70 LUFS).", ""]
+      : info.silentAudio
+        ? ["> FAIL: the audio is digitally silent, so loudness could not be measured and is reported as -70 LUFS.", ""]
+        : []),
     "## Contact sheet",
     "",
     `![Contact sheet](contact-sheet.jpg) (${m.contactSheetFrames} frames, [contact-sheet.jpg](contact-sheet.jpg))`,
@@ -109,12 +117,25 @@ export const qa: StepModule = {
       [...BASE, "-i", input, "-t", String(blackWin), "-vf", "blackdetect=d=0.05:pix_th=0.10", "-an", "-f", "null", "-"],
       QA_TIMEOUT_MS,
     );
-    const silence = await runBinCapture(
-      ffmpeg,
-      [...BASE, "-i", input, "-t", String(silenceWin), "-af", "silencedetect=n=-50dB:d=0.1", "-vn", "-f", "null", "-"],
-      QA_TIMEOUT_MS,
-    );
-    const loud = await measureLoudness(input, ctx.env);
+    const hasAudio = (await runBin(ffprobe, ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0", input])).trim() !== "";
+    let silentStartSec = silenceWin;
+    let loud = { integratedLufs: SILENT_DB, truePeakDb: SILENT_DB };
+    let silentAudio = false;
+    if (hasAudio) {
+      const silence = await runBinCapture(
+        ffmpeg,
+        [...BASE, "-i", input, "-t", String(silenceWin), "-af", "silencedetect=n=-50dB:d=0.1", "-vn", "-f", "null", "-"],
+        QA_TIMEOUT_MS,
+      );
+      silentStartSec = parseSilentStart(silence.stderr, silenceWin);
+      try {
+        loud = await measureLoudness(input, ctx.env);
+      } catch (e) {
+        // digital silence: loudnorm reports -inf, which the core parser rejects
+        if (!/no usable input_i/.test(String((e as Error).message))) throw e;
+        silentAudio = true;
+      }
+    }
 
     // 12 evenly spaced frames: seek half a step in, then sample at 12/duration fps (last frame cloned if rounding drops one), tiled 4x3 at 400 px each (1600 wide).
     await mkdir(join(ctx.projectDir, "renders"), { recursive: true });
@@ -125,16 +146,15 @@ export const qa: StepModule = {
 
     const metrics = {
       blackStartSec: parseBlackStart(black.stderr, blackWin),
-      silentStartSec: parseSilentStart(silence.stderr, silenceWin),
+      silentStartSec,
       integratedLufs: round(loud.integratedLufs, 1),
       truePeakDb: round(loud.truePeakDb, 1),
       contactSheetFrames: FRAMES,
       durationSec: round(duration, 3),
+      hasAudio,
     };
-    await writeFile(
-      join(ctx.projectDir, "renders", "qa.md"),
-      reportMarkdown({ file: "renders/final.mp4", durationSec: metrics.durationSec, width, height, metrics }),
-    );
+    const md = reportMarkdown({ file: "renders/final.mp4", durationSec: metrics.durationSec, width, height, hasAudio, silentAudio, metrics });
+    await writeOutputAtomic(join(ctx.projectDir, "renders", "qa.md"), (tmp) => writeFile(tmp, md));
     ctx.log(`qa: black ${metrics.blackStartSec}s, silent ${metrics.silentStartSec}s, ${metrics.integratedLufs} LUFS, ${metrics.truePeakDb} dBTP`);
     return { metrics, artifacts: ["renders/contact-sheet.jpg", "renders/qa.md"] };
   },

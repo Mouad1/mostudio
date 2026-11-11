@@ -10,7 +10,8 @@ Checks the final render, measures it and writes a report for a human to score (s
 - **Contact sheet:** 12 frames evenly spaced (`fps=12/duration`, first sample half a step in), `scale=400:-2,tile=4x3`, 1600 px wide JPEG.
 - **qa.md:** file, duration, resolution; a "Measured" table with pass/warn/fail per gate threshold; a "Rubric (fill in)" table (hook clear in 3 s, pacing 1-5, caption errors per minute, loudness auto-filled, notes).
 - **Metrics:** `blackStartSec, silentStartSec, integratedLufs, truePeakDb, contactSheetFrames, durationSec`.
-- **Gate:** `blackStartSec <= 0.1` fail, `silentStartSec <= 0.5` fail, `integratedLufs` within [-15, -13] warn.
+- **No audio / digital silence:** no audio stream gives `hasAudio: false`, `silentStartSec` = window, loudness -70; silent audio (loudnorm -inf) gives -70 LUFS and dBTP. Both fail the gate and are noted in qa.md.
+- **Gate:** `hasAudio == true` fail, `blackStartSec <= 0.1` fail, `silentStartSec <= 0.5` fail, `integratedLufs` within [-15, -13] warn.
 
 ```
 mostudio step qa --project <dir>
