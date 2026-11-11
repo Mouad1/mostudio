@@ -25,10 +25,15 @@ export type RunWorkflowOptions = Omit<RunStepOptions, "params" | "force" | "gate
   force?: string[];
   /** Called as each step completes. */
   onStep?: (result: StepResult & { cached: boolean }) => void;
+  /** Allow running a workflow other than the one this project ran before (steps/workflow.json). */
+  switchWorkflow?: boolean;
 };
 
 /** A --param naming an unknown step/key or a bad value; nothing is persisted. */
 export class WorkflowParamError extends Error {}
+
+/** The project already ran another workflow; nothing is persisted. */
+export class WorkflowMismatchError extends Error {}
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -65,12 +70,26 @@ async function readApprovals(projectDir: string): Promise<Record<string, string>
 }
 
 const paramsPath = (projectDir: string) => join(projectDir, "steps", "workflow-params.json");
+const workflowPath = (projectDir: string) => join(projectDir, "steps", "workflow.json");
 
 type StepParams = Record<string, Record<string, unknown>>;
+type WorkflowParams = Record<string, StepParams>;
 
-/** Per-step params remembered from earlier runs of this project. */
-async function readParams(projectDir: string): Promise<StepParams> {
-  return (await readJson<StepParams>(paramsPath(projectDir))) ?? {};
+/** Name of the workflow this project runs (steps/workflow.json), if any. */
+export async function readProjectWorkflow(projectDir: string): Promise<string | undefined> {
+  const j = await readJson<{ name?: unknown }>(workflowPath(projectDir));
+  return typeof j?.name === "string" && j.name !== "" ? j.name : undefined;
+}
+
+/**
+ * Params remembered from earlier runs, keyed workflow -> step -> key. The pre-workflow flat shape
+ * (step -> key -> primitive) is read as belonging to `legacyOwner`.
+ */
+async function readParams(projectDir: string, legacyOwner: string): Promise<WorkflowParams> {
+  const raw = (await readJson<Record<string, unknown>>(paramsPath(projectDir))) ?? {};
+  const flat = Object.values(raw).some((step) => isObject(step) && Object.values(step).some((v) => !isObject(v)));
+  if (flat) return { [legacyOwner]: raw as StepParams };
+  return raw as WorkflowParams;
 }
 
 /** Record the step's latest pass/warn inputsHash as approved. */
@@ -91,7 +110,7 @@ export async function runWorkflow(
   steps: Record<string, StepModule>,
   opts: RunWorkflowOptions,
 ): Promise<WorkflowResult> {
-  const { params: cliParams, force, onStep, ...rest } = opts;
+  const { params: cliParams, force, onStep, switchWorkflow, ...rest } = opts;
   const results: WorkflowResult["results"] = [];
   const redactor = createRedactor([process.env, rest.env]);
   // Validate before persisting: a typo must not be remembered.
@@ -105,9 +124,19 @@ export async function runWorkflow(
       throw new WorkflowParamError(`--param for step "${step}": ${(err as Error).message}`);
     }
   }
+  // One workflow per project: its params, approvals and outputs belong together.
+  const ran = await readProjectWorkflow(projectDir);
+  if (ran !== undefined && ran !== wf.name && !switchWorkflow) {
+    throw new WorkflowMismatchError(`this project ran ${ran}; create a new project (mostudio new) or pass --switch-workflow`);
+  }
+  const all = await readParams(projectDir, ran ?? wf.name);
+  if (ran !== wf.name) {
+    await mkdir(join(projectDir, "steps"), { recursive: true });
+    await writeJsonAtomic(workflowPath(projectDir), { name: wf.name });
+  }
   // Remembered params: workflow file < persisted < this call's params. Passing a param again changes it;
   // an empty value forgets the remembered key.
-  const persisted = await readParams(projectDir);
+  const persisted = all[wf.name] ?? {};
   const remembered: StepParams = { ...persisted };
   for (const [step, p] of Object.entries(cliParams ?? {})) {
     const merged = { ...persisted[step], ...p };
@@ -117,7 +146,9 @@ export async function runWorkflow(
   }
   if (Object.keys(cliParams ?? {}).length > 0) {
     await mkdir(join(projectDir, "steps"), { recursive: true });
-    await writeJsonAtomic(paramsPath(projectDir), remembered);
+    const next: WorkflowParams = { ...all, [wf.name]: remembered };
+    if (Object.keys(remembered).length === 0) delete next[wf.name];
+    await writeJsonAtomic(paramsPath(projectDir), next);
   }
   for (const entry of wf.steps) {
     const mod = Object.hasOwn(steps, entry.step) ? steps[entry.step] : undefined;

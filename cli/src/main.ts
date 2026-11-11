@@ -13,6 +13,7 @@ import {
   parseWorkflow,
   runStep,
   runWorkflow,
+  WorkflowMismatchError,
   WorkflowParamError,
   approveStep,
 } from "../../core/src/index.ts";
@@ -50,7 +51,7 @@ const USAGE = `usage:
   mostudio new <slug> [--brief <file>]
   mostudio step <name> --project <dir> [--param k=v]... [--force] [--json]
   mostudio status --project <dir> [--json]
-  mostudio run <workflow> --project <dir> [--param <step>.<key>=<value>]... [--force <step>]... [--json]
+  mostudio run <workflow> --project <dir> [--param <step>.<key>=<value>]... [--force <step>]... [--switch-workflow] [--json]
   mostudio approve <step> --project <dir>
 `;
 
@@ -66,10 +67,12 @@ type Parsed = {
   forceSteps: string[];
   json: boolean;
   help: boolean;
+  /** `run` only: allow a workflow other than the one the project ran. */
+  switchWorkflow: boolean;
 };
 
 function parseArgs(args: string[]): Parsed {
-  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false };
+  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false, switchWorkflow: false };
   const isRun = args[0] === "run";
   const value = (i: number, flag: string): string => {
     const v = args[i];
@@ -90,6 +93,7 @@ function parseArgs(args: string[]): Parsed {
       else p.force = true;
     }
     else if (a === "--json") p.json = true;
+    else if (a === "--switch-workflow" && isRun) p.switchWorkflow = true;
     else if (a === "--help" || a === "-h") p.help = true;
     else if (a.startsWith("--")) throw new UsageError(`unknown option: ${a}`);
     else p.positional.push(a);
@@ -225,6 +229,7 @@ async function cmdRun(
   const result = await runWorkflow(projectDir, wf, steps, {
     params,
     force: p.forceSteps,
+    switchWorkflow: p.switchWorkflow,
     config,
     providers,
     env,
@@ -298,6 +303,10 @@ export async function main(
     if (command === "approve") return await cmdApprove(p, io);
     return await cmdStatus(p, io);
   } catch (err) {
+    if (err instanceof WorkflowMismatchError) {
+      io.stderr(`${err.message}\n`);
+      return 64;
+    }
     if (err instanceof UsageError || err instanceof WorkflowParamError) {
       io.stderr(`${err.message}\n${USAGE}`);
       return 64;

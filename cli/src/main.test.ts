@@ -457,3 +457,17 @@ test("run: invalid --param exits 64 naming step and key, persists nothing; empty
   assert.equal(await run(["run", "wf-val", "--project", dir, "--param", "fake.n="]), 0);
   assert.match(out(), /a=1/);
 });
+
+test("run refuses a second workflow on a project (exit 64) unless --switch-workflow", async () => {
+  writeWf("wf-a", { name: "wf-a", steps: [{ step: "fake", params: { n: 1 } }] });
+  writeWf("wf-b", { name: "wf-b", steps: [{ step: "fake", params: { n: 2 } }] });
+  const dir = await newProject("run-switch");
+  reset();
+  assert.equal(await run(["run", "wf-a", "--project", dir]), 0);
+  reset();
+  assert.equal(await run(["run", "wf-b", "--project", dir]), 64);
+  assert.match(err(), /this project ran wf-a; create a new project \(mostudio new\) or pass --switch-workflow/);
+  reset();
+  assert.equal(await run(["run", "wf-b", "--project", dir, "--switch-workflow"]), 0);
+  assert.match(out(), /^wf-b: done$/m);
+});

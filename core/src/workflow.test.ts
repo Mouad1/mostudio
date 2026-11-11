@@ -8,7 +8,7 @@ import { latest, readLedger } from "./ledger.ts";
 import type { Config } from "./config.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { StepModule } from "./step.ts";
-import { approveStep, parseWorkflow, runWorkflow } from "./workflow.ts";
+import { approveStep, parseWorkflow, runWorkflow, WorkflowMismatchError } from "./workflow.ts";
 import type { Workflow } from "./workflow.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
@@ -244,4 +244,37 @@ test("empty --param value forgets the remembered key", async () => {
   assert.deepEqual(seen.a, { n: 1 });
   const saved = JSON.parse(await readFile(join(dir, "steps", "workflow-params.json"), "utf8"));
   assert.deepEqual(saved, {});
+});
+
+test("remembered params are keyed by workflow", async () => {
+  const mods = { a: fake("a", { params: true }) };
+  await runWorkflow(dir, { name: "one", steps: [{ step: "a" }] }, mods, { ...base(), params: { a: { k: "x" } } });
+  const saved = JSON.parse(await readFile(join(dir, "steps", "workflow-params.json"), "utf8"));
+  assert.deepEqual(saved, { one: { a: { k: "x" } } });
+});
+
+test("old flat workflow-params.json is migrated on read", async () => {
+  const mods = { a: fake("a", { params: true }) };
+  await mkdir(join(dir, "steps"), { recursive: true });
+  await writeFile(join(dir, "steps", "workflow-params.json"), JSON.stringify({ a: { k: "old" } }));
+  await runWorkflow(dir, { name: "one", steps: [{ step: "a" }] }, mods, base());
+  assert.deepEqual(seen.a, { k: "old" });
+  await runWorkflow(dir, { name: "one", steps: [{ step: "a" }] }, mods, { ...base(), params: { a: { n: 2 } } });
+  const saved = JSON.parse(await readFile(join(dir, "steps", "workflow-params.json"), "utf8"));
+  assert.deepEqual(saved, { one: { a: { k: "old", n: 2 } } });
+});
+
+test("one workflow per project: another one is refused unless switchWorkflow", async () => {
+  const mods = { a: fake("a", { params: true }) };
+  await runWorkflow(dir, { name: "one", steps: [{ step: "a" }] }, mods, { ...base(), params: { a: { k: "x" } } });
+  assert.deepEqual(JSON.parse(await readFile(join(dir, "steps", "workflow.json"), "utf8")), { name: "one" });
+  await assert.rejects(
+    runWorkflow(dir, { name: "two", steps: [{ step: "a" }] }, mods, { ...base(), params: { a: { k: "y" } } }),
+    (e: unknown) => e instanceof WorkflowMismatchError && /this project ran one; create a new project \(mostudio new\) or pass --switch-workflow/.test(e.message),
+  );
+  assert.deepEqual(JSON.parse(await readFile(join(dir, "steps", "workflow-params.json"), "utf8")), { one: { a: { k: "x" } } });
+  const r = await runWorkflow(dir, { name: "two", steps: [{ step: "a" }] }, mods, { ...base(), switchWorkflow: true });
+  assert.equal(r.status, "done");
+  assert.deepEqual(seen.a, {});
+  assert.deepEqual(JSON.parse(await readFile(join(dir, "steps", "workflow.json"), "utf8")), { name: "two" });
 });
