@@ -8,7 +8,7 @@ import { latest, readLedger } from "./ledger.ts";
 import type { Config } from "./config.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
 import type { StepModule } from "./step.ts";
-import { approveStep, parseWorkflow, runWorkflow, WorkflowMismatchError } from "./workflow.ts";
+import { approveStep, parseWorkflow, runWorkflow, stepParams, WorkflowMismatchError } from "./workflow.ts";
 import type { Workflow } from "./workflow.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
@@ -280,4 +280,55 @@ test("one workflow per project: another one is refused unless switchWorkflow", a
   assert.equal(r.status, "done");
   assert.deepEqual(seen.a, {});
   assert.deepEqual(JSON.parse(await readFile(join(dir, "steps", "workflow.json"), "utf8")), { name: "two" });
+});
+
+test("autoApprove records approval and runs to the end", async () => {
+  const mods = { a: fake("a"), b: fake("b") };
+  const w = wf([{ step: "a", approve: true }, { step: "b" }]);
+  const started: string[] = [];
+  const approved: { step: string; auto: boolean }[] = [];
+  const r = await runWorkflow(dir, w, mods, {
+    ...base(),
+    autoApprove: true,
+    onStepStart: (s) => started.push(s),
+    onApprove: (step, auto) => approved.push({ step, auto }),
+  });
+  assert.equal(r.status, "done");
+  assert.equal(calls.a, 1);
+  assert.equal(calls.b, 1);
+  assert.deepEqual(started, ["a", "b"]);
+  assert.deepEqual(approved, [{ step: "a", auto: true }]);
+  const approvals = JSON.parse(await readFile(join(dir, "steps", "approvals.json"), "utf8"));
+  assert.equal(approvals.a, r.results[0]?.inputsHash);
+});
+
+test("autoApprove never skips a failing gate", async () => {
+  const mods = { a: fake("a", { fail: true }), b: fake("b") };
+  const w = wf([{ step: "a", approve: true }, { step: "b" }]);
+  const approved: { step: string; auto: boolean }[] = [];
+  const r = await runWorkflow(dir, w, mods, {
+    ...base(),
+    autoApprove: true,
+    onApprove: (step, auto) => approved.push({ step, auto }),
+  });
+  assert.equal(r.status, "failed");
+  assert.equal(r.stoppedAt, "a");
+  assert.equal(calls.b, undefined);
+  assert.deepEqual(approved, []);
+  assert.equal(existsSync(join(dir, "steps", "approvals.json")), false);
+});
+
+test("stepParams merges workflow entry and remembered params", async () => {
+  const mods = { a: fake("a", { params: true }), b: fake("b") };
+  const w = wf([
+    { step: "a", params: { k: "wf", n: 1 } },
+    { step: "b" },
+  ]);
+  assert.deepEqual(await stepParams(dir, w, "a"), { k: "wf", n: 1 });
+  assert.deepEqual(await stepParams(dir, w, "b"), {});
+  assert.deepEqual(await stepParams(dir, w, "unknown"), {});
+  await runWorkflow(dir, w, mods, { ...base(), params: { a: { k: "cli" } } });
+  assert.deepEqual(await stepParams(dir, w, "a"), { k: "cli", n: 1 });
+  assert.deepEqual(await stepParams(dir, w, "b"), {});
+  assert.deepEqual(await stepParams(dir, w, "unknown"), {});
 });

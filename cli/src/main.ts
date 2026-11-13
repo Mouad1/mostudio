@@ -46,7 +46,7 @@ const USAGE = `usage:
   mostudio new <slug> [--brief <file>]
   mostudio step <name> --project <dir> [--param k=v]... [--force] [--json]
   mostudio status --project <dir> [--json]
-  mostudio run <workflow> --project <dir> [--param <step>.<key>=<value>]... [--force <step>]... [--switch-workflow] [--json]
+  mostudio run <workflow> --project <dir> [--param <step>.<key>=<value>]... [--force <step>]... [--switch-workflow] [--auto] [--json]
   mostudio approve <step> --project <dir>
 `;
 
@@ -64,10 +64,12 @@ type Parsed = {
   help: boolean;
   /** `run` only: allow a workflow other than the one the project ran. */
   switchWorkflow: boolean;
+  /** `run` only: auto-approve steps waiting for approval. */
+  auto: boolean;
 };
 
 function parseArgs(args: string[]): Parsed {
-  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false, switchWorkflow: false };
+  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false, switchWorkflow: false, auto: false };
   const isRun = args[0] === "run";
   const value = (i: number, flag: string): string => {
     const v = args[i];
@@ -89,6 +91,7 @@ function parseArgs(args: string[]): Parsed {
     }
     else if (a === "--json") p.json = true;
     else if (a === "--switch-workflow" && isRun) p.switchWorkflow = true;
+    else if (a === "--auto" && isRun) p.auto = true;
     else if (a === "--help" || a === "-h") p.help = true;
     else if (a.startsWith("--")) throw new UsageError(`unknown option: ${a}`);
     else p.positional.push(a);
@@ -225,12 +228,16 @@ async function cmdRun(
     params,
     force: p.forceSteps,
     switchWorkflow: p.switchWorkflow,
+    autoApprove: p.auto,
     config,
     providers,
     env,
     log: (msg) => io.stderr(`${msg}\n`),
     onStep: (r) => {
       if (!p.json) io.stdout(`${formatResult(r)}\n`);
+    },
+    onApprove: (step, auto) => {
+      if (auto) io.stderr(`auto-approved ${step}\n`);
     },
   });
   if (p.json) {

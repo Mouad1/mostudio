@@ -67,11 +67,11 @@ mostudio run short --project projects/<slug> --param transcribe.dialect=darija -
 ```
 
 ```
-mostudio run rough-cut --project projects/<slug> [--param <step>.<key>=<value>]... [--force <step>]... [--json]
+mostudio run rough-cut --project projects/<slug> [--param <step>.<key>=<value>]... [--force <step>]... [--switch-workflow] [--auto] [--json]
 mostudio approve captions --project projects/<slug>
 ```
 
-A step with `"approve": true` pauses the run (exit 3) after it succeeds. Review its outputs (for captions: `captions/captions.txt`, fixes go in `edits/replacements.txt`), re-run the same command, then `mostudio approve <step>`; the next run continues. Approval is tied to the step's input hash, so changing its inputs asks again. `--param` overrides the workflow's own params for that step. Exit codes: 0 done, 2 failed, 3 awaiting approval, 64 usage error.
+A step with `"approve": true` pauses the run (exit 3) after it succeeds. Review its outputs (for captions: `captions/captions.txt`, fixes go in `edits/replacements.txt`), re-run the same command, then `mostudio approve <step>`; the next run continues. Approval is tied to the step's input hash, so changing its inputs asks again. Pass `--auto` to auto-approve human review gates without pausing (gate metric failures still halt the run). `--param` overrides the workflow's own params for that step. Exit codes: 0 done, 2 failed, 3 awaiting approval, 64 usage error.
 
 One project runs one workflow: the first `run` records its name in `steps/workflow.json`, and running a different workflow on the same project exits 64 ("this project ran <name>; create a new project (mostudio new) or pass --switch-workflow"). Start a new project with `mostudio new`, or pass `--switch-workflow` to switch on purpose.
 

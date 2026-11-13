@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -527,4 +527,17 @@ test("status marks an unapproved approval step of the project's workflow", async
   reset();
   assert.equal(await run(["status", "--project", dir]), 0);
   assert.doesNotMatch(out(), /awaiting approval/);
+});
+
+test("run --auto passes the approve step and logs it", async () => {
+  writeWf("wf-auto", { name: "wf-auto", steps: [{ step: "captions", approve: true }, { step: "fake", params: { n: 1 } }] });
+  const dir = await newProject("run-auto");
+  reset();
+  assert.equal(await run(["run", "wf-auto", "--project", dir, "--auto"]), 0);
+  assert.match(err(), /auto-approved captions/);
+  assert.match(out(), /^captions .*pass/m);
+  assert.match(out(), /^fake .*pass/m);
+  assert.match(out(), /^wf-auto: done$/m);
+  const approvals = JSON.parse(readFileSync(join(dir, "steps", "approvals.json"), "utf8"));
+  assert.ok(approvals.captions);
 });

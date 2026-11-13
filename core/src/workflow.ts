@@ -27,6 +27,12 @@ export type RunWorkflowOptions = Omit<RunStepOptions, "params" | "force" | "gate
   onStep?: (result: StepResult & { cached: boolean }) => void;
   /** Allow running a workflow other than the one this project ran before (steps/workflow.json). */
   switchWorkflow?: boolean;
+  /** Auto-approve human approval steps instead of pausing. */
+  autoApprove?: boolean;
+  /** Called immediately before running each step. */
+  onStepStart?: (step: string) => void;
+  /** Called when an approval step is approved (auto or manual). */
+  onApprove?: (step: string, auto: boolean) => void;
 };
 
 /** A --param naming an unknown step/key or a bad value; nothing is persisted. */
@@ -105,6 +111,23 @@ export async function pendingApprovals(projectDir: string, wf: Workflow): Promis
     });
 }
 
+/**
+ * Merges workflow entry params with remembered params from steps/workflow-params.json
+ * (the exact same merge runWorkflow uses; returns {} if the step is not in wf).
+ */
+export async function stepParams(
+  projectDir: string,
+  wf: Workflow,
+  step: string,
+): Promise<Record<string, unknown>> {
+  const entry = wf.steps.find((s) => s.step === step);
+  if (!entry) return {};
+  const ran = await readProjectWorkflow(projectDir);
+  const all = await readParams(projectDir, ran ?? wf.name);
+  const persisted = all[wf.name] ?? {};
+  return { ...(entry.params ?? {}), ...(persisted[step] ?? {}) };
+}
+
 /** Record the step's latest pass/warn inputsHash as approved. */
 export async function approveStep(projectDir: string, step: string): Promise<void> {
   const r = latest(await readLedger(projectDir), step);
@@ -123,7 +146,7 @@ export async function runWorkflow(
   steps: Record<string, StepModule>,
   opts: RunWorkflowOptions,
 ): Promise<WorkflowResult> {
-  const { params: cliParams, force, onStep, switchWorkflow, ...rest } = opts;
+  const { params: cliParams, force, onStep, switchWorkflow, autoApprove, onStepStart, onApprove, ...rest } = opts;
   const results: WorkflowResult["results"] = [];
   const redactor = createRedactor([process.env, rest.env]);
   // Validate before persisting: a typo must not be remembered.
@@ -173,6 +196,7 @@ export async function runWorkflow(
         await writeJsonAtomic(approvalsPath(projectDir), approvals);
       }
     }
+    onStepStart?.(entry.step);
     let result: StepResult & { cached: boolean };
     try {
       result = await runStep(projectDir, mod, {
@@ -208,7 +232,12 @@ export async function runWorkflow(
     onStep?.(result);
     if (result.status === "fail") return { status: "failed", results, stoppedAt: entry.step };
     if (entry.approve && (await readApprovals(projectDir))[entry.step] !== result.inputsHash) {
-      return { status: "awaiting-approval", results, stoppedAt: entry.step };
+      if (autoApprove) {
+        await approveStep(projectDir, entry.step);
+        onApprove?.(entry.step, true);
+      } else {
+        return { status: "awaiting-approval", results, stoppedAt: entry.step };
+      }
     }
   }
   return { status: "done", results };
