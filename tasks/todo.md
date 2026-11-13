@@ -64,3 +64,15 @@
 - [x] CLI run/approve/status; workflows rough-cut + short
 - [x] Live smoke on Marginol clip: rough-cut done (−14.4 LUFS, endDrift 10 ms), shorts render via HyperFrames
 - [ ] Task 11: real 10–20 min rush (needs user's clip), measure user time (G2 ≤ 30 min)
+
+## Plan 2.1 — Darija transcription + caption languages (2026-11-13)
+
+Goal: Darija rushes give clean captions in the audience's language: `arabizi` (Morocco), `fr`, `en`. Never Arabic script on screen.
+Evidence driving it: S1 results (spikes/s1-stt/RESULTS.md) + first real rush (MSA drift, fake "اشتركوا في القناة", 62 % Arabic script).
+
+- [ ] transcribe v4: `dialect=darija` → ~30 s windows, two passes (ar + Darija prompt / auto); keep auto only when it hears FR/EN and the ar pass reads as MSA. Drop known Whisper hallucination segments. `prompt` param. Metrics: windows, autoWindows, hallucinationsDropped.
+- [ ] core: `transcribeAudio` takes `prompt`; `core/src/units.ts` (Unit type, unitsToWords).
+- [ ] localize v1 (new step): cut-timeline sentence units → LLM (provider rotation) → `localize/units.json` in `lang` (source|arabizi|fr|en). Gate: arabicScriptPct == 0 when lang ≠ source.
+- [ ] captions v3 + chapters v4 read `localize/units.json` (titles and cues in the same language).
+- [ ] workflows: localize after cut in rough-cut and short.
+- [ ] Real check: first half of the 2026-11-12 rush in arabizi, fr, en; contact sheets + caption samples to user.
