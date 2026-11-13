@@ -9,6 +9,8 @@ import { NoProviderError, resolveBin, runBin, runStep, writeJsonAtomic } from ".
 import { buildSegments, parseWhisperCpp } from "../src/whisper-cpp.ts";
 import { transcribeCloudflare } from "../src/cloudflare.ts";
 import { planChunks } from "../src/chunk.ts";
+import { choosePass, DARIJA_PROMPT, darijaPrompt, isFrenchOrEnglish, msaScore, normalizeArabic } from "../src/darija.ts";
+import { dropHallucinations, isHallucination, normalizeText } from "../src/hallucinations.ts";
 import { createTranscribe } from "../src/transcribe.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
@@ -332,4 +334,207 @@ test("bracketed non-speech tokens and music symbols are dropped", async () => {
   const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
   assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["Hello", "world"]);
   assert.equal(r.metrics.nonSpeechDropped, 6);
+});
+
+test("planChunks with 30 s windows cuts at the quietest point within +-5 s, 600 s default unchanged", () => {
+  const env = new Float32Array(7_000).fill(-30); // 70 s at 10 ms
+  for (let i = 2_700; i < 2_720; i++) env[i] = -90; // quiet 27.0..27.2 s
+  const w = planChunks(70, env, 10, 30, 5);
+  assert.equal(w.length, 3);
+  assert.ok((w[0]?.end as number) >= 27 && (w[0]?.end as number) <= 27.2, String(w[0]?.end));
+  assert.ok((w[1]?.end as number) >= 55 && (w[1]?.end as number) <= 65);
+  assert.equal(w[2]?.end, 70);
+  assert.deepEqual(planChunks(34, env, 10, 30, 5), [{ start: 0, end: 34 }]);
+  assert.deepEqual(planChunks(70, env, 10), [{ start: 0, end: 70 }]);
+});
+
+test("normalizeArabic folds alef/hamza variants and strips harakat", () => {
+  assert.equal(normalizeArabic("أيضاً إلى آخر"), "ايضا الي اخر");
+});
+
+test("msaScore: MSA markers minus Darija markers", () => {
+  assert.equal(msaScore("سوف نريك الكثير من المشاهدين الذين يتابعون"), 2);
+  assert.equal(msaScore("دابا غادي نشرح ليكم كيفاش كنخدم"), -3);
+  assert.equal(msaScore("وسوف نحن، ايضا!"), 3);
+  assert.equal(msaScore("bonjour"), 0);
+  assert.equal(msaScore("سوف ديال"), 0);
+});
+
+test("isFrenchOrEnglish accepts names and codes in any case", () => {
+  for (const l of ["french", "FR", "English", "en"]) assert.equal(isFrenchOrEnglish(l), true, l);
+  for (const l of ["arabic", "ar", "", undefined]) assert.equal(isFrenchOrEnglish(l), false, String(l));
+});
+
+test("choosePass picks B only for French/English auto when A reads as MSA", () => {
+  assert.equal(choosePass("سوف نشرح لكم", "french"), "B");
+  assert.equal(choosePass("سوف نشرح لكم", "arabic"), "A");
+  assert.equal(choosePass("دابا غادي نشرح", "french"), "A");
+  assert.equal(choosePass("", "english"), "A");
+});
+
+test("darijaPrompt appends the user's prompt", () => {
+  assert.equal(darijaPrompt(), DARIJA_PROMPT);
+  assert.equal(darijaPrompt("  "), DARIJA_PROMPT);
+  assert.equal(darijaPrompt("mostudio, Groq"), `${DARIJA_PROMPT} mostudio, Groq`);
+  assert.match(DARIJA_PROMPT, /دابا/);
+});
+
+test("normalizeText strips punctuation and diacritics, lowercases, collapses spaces", () => {
+  assert.equal(normalizeText("  Sous-titres réalisés par la communauté d'Amara.org  "), "sous titres realises par la communaute d amara org");
+  assert.equal(normalizeText("اشتركوا   في القناةَ!"), "اشتركوا في القناة");
+});
+
+test("isHallucination: equal to, or whole words inside, a blocklisted line", () => {
+  assert.equal(isHallucination("اشتركوا في القناة."), true);
+  assert.equal(isHallucination("Thanks for watching!"), true);
+  assert.equal(isHallucination("thanks for"), true);
+  assert.equal(isHallucination("Subtitles by the Amara.org community"), true);
+  assert.equal(isHallucination("thanks for watching my video about montage"), false);
+  assert.equal(isHallucination("than"), false);
+  assert.equal(isHallucination(" ... "), false);
+});
+
+test("dropHallucinations removes the segment and the words whose midpoint is inside it", () => {
+  const words = [
+    { w: "اشتركوا", start: 0, end: 5 },
+    { w: "في", start: 5, end: 10 },
+    { w: "القناة", start: 10, end: 15.2 },
+    { w: "دابا", start: 15.5, end: 16 },
+  ];
+  const segments = [
+    { start: 0, end: 15, text: " اشتركوا في القناة" },
+    { start: 15.5, end: 16, text: " دابا" },
+  ];
+  const out = dropHallucinations(words, segments);
+  assert.equal(out.dropped, 1);
+  assert.deepEqual(out.words.map((w) => w.w), ["دابا"]);
+  assert.deepEqual(out.segments, [segments[1]]);
+  assert.deepEqual(dropHallucinations(words.slice(3), segments.slice(1)), { words: words.slice(3), segments: segments.slice(1), dropped: 0 });
+});
+
+/** verbose_json reply whose language is `language`. */
+const reply = (language: string, words: [string, number, number][]) =>
+  new Response(
+    JSON.stringify({
+      language,
+      words: words.map(([word, start, end]) => ({ word, start, end })),
+      segments: words.length ? [{ start: words[0]?.[1], end: words.at(-1)?.[2], text: words.map((w) => w[0]).join(" "), avg_logprob: -0.1 }] : [],
+    }),
+    { status: 200 },
+  );
+
+test("darija: forced-ar pass by default, auto pass only for French speech that A turned into MSA", async () => {
+  await seed("d.wav", "sine=frequency=440:duration=70", 70);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const calls: { file: string; language: unknown; prompt: unknown }[] = [];
+  const logs: string[] = [];
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const form = init?.body as FormData;
+      const file = (form.get("file") as File).name;
+      const language = form.get("language");
+      calls.push({ file, language, prompt: form.get("prompt") });
+      const win = Number(/chunk-(\d+)/.exec(file)?.[1]);
+      if (language === "ar") {
+        if (win === 0) return reply("arabic", [["دابا", 1, 1.5], ["غادي", 1.5, 2], ["نشرح", 2, 2.5]]);
+        return reply("arabic", [["سوف", 1, 1.5], ["نشرح", 1.5, 2], ["الذي", 2, 2.5]]);
+      }
+      if (win === 1) return reply("french", [["bonjour", 1, 1.5], ["tout", 1.5, 2], ["le", 2, 2.2], ["monde", 2.2, 2.6]]);
+      return reply("arabic", [["سوف", 1, 1.5]]);
+    },
+  });
+  const r = await runStep(dir, step, {
+    params: { dialect: "darija", prompt: "mostudio" },
+    ...ctxBase(registry),
+    log: (m: string) => logs.push(m),
+  });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.windows, 3);
+  assert.equal(r.metrics.autoWindows, 1);
+  assert.equal(r.metrics.chunks, 3);
+  // window 0: A only (Darija); windows 1 and 2: A then B
+  assert.deepEqual(calls.map((c) => [c.file.slice(-7, -4), c.language]), [["000", "ar"], ["001", "ar"], ["001", null], ["002", "ar"], ["002", null]]);
+  for (const c of calls.filter((x) => x.language === "ar")) assert.equal(c.prompt, `${DARIJA_PROMPT} mostudio`);
+  for (const c of calls.filter((x) => x.language === null)) assert.equal(c.prompt, null);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["دابا", "غادي", "نشرح", "bonjour", "tout", "le", "monde", "سوف", "نشرح", "الذي"]);
+  assert.ok(j.words[3].start > 25, String(j.words[3].start));
+  assert.ok(logs.some((l) => /window 2: pass B/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /window 1: pass A/.test(l)), logs.join("\n"));
+});
+
+test("darija: a failing auto pass keeps pass A", async () => {
+  await seed("d2.wav", "sine=frequency=440:duration=10", 10);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const form = init?.body as FormData;
+      if (form.get("language") === "ar") return reply("arabic", [["سوف", 1, 1.5], ["نشرح", 1.5, 2]]);
+      return new Response("boom", { status: 500 });
+    },
+  });
+  const r = await runStep(dir, step, { params: { dialect: "darija" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.autoWindows, 0);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["سوف", "نشرح"]);
+});
+
+test("unknown dialect fails listing the supported one", async () => {
+  await seed("a.wav", "sine=frequency=440:duration=2", 2);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const r = await runStep(dir, createTranscribe({ fetchImpl: async () => verbose([["a", 0, 0.2]]) }), { params: { dialect: "egyptian" }, ...ctxBase(registry) });
+  assert.equal(r.status, "fail");
+  assert.match(r.error ?? "", /unknown dialect "egyptian" \(supported: darija\)/);
+});
+
+test("without dialect the prompt param is forwarded and hallucinated segments are dropped", async () => {
+  await seed("h.wav", "sine=frequency=440:duration=20", 20);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  let prompt: unknown;
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      prompt = (init?.body as FormData).get("prompt");
+      return new Response(
+        JSON.stringify({
+          language: "arabic",
+          words: [
+            { word: "اشتركوا", start: 0, end: 5 },
+            { word: "في", start: 5, end: 10 },
+            { word: "القناة", start: 10, end: 15 },
+            { word: "مرحبا", start: 16, end: 17 },
+          ],
+          segments: [
+            { start: 0, end: 15, text: " اشتركوا في القناة", avg_logprob: -0.1 },
+            { start: 16, end: 17, text: " مرحبا", avg_logprob: -0.1 },
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+  });
+  const r = await runStep(dir, step, { params: { prompt: "Groq, ffmpeg" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(prompt, "Groq, ffmpeg");
+  assert.equal(r.metrics.hallucinationsDropped, 1);
+  assert.equal(r.metrics.windows, undefined);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["مرحبا"]);
+  assert.equal(j.segments.length, 1);
+});
+
+test("cloudflare adapter sends the prompt as initial_prompt", async () => {
+  const mp3 = join(tmp, "c3.mp3");
+  writeFileSync(mp3, "x");
+  let body: Record<string, string> = {};
+  await transcribeCloudflare(entry("cloudflare", "native", { envValues: { accountId: "a" } }), mp3, {
+    language: "ar",
+    prompt: "دابا",
+    fetchImpl: async (_u, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ result: { words: [] } }), { status: 200 });
+    },
+  });
+  assert.equal(body.initial_prompt, "دابا");
+  assert.equal(body.language, "ar");
 });

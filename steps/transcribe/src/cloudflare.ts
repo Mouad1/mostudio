@@ -18,7 +18,7 @@ type CfResponse = {
 export async function transcribeCloudflare(
   p: PickedProvider,
   audioPath: string,
-  opts: { language?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {},
+  opts: { language?: string; prompt?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {},
 ): Promise<{ language: string; words: Word[]; segments: Segment[] }> {
   const accountId = p.envValues.accountId;
   if (!accountId) throw new Error("cloudflare: accountId missing (set CLOUDFLARE_ACCOUNT_ID in .env.local)");
@@ -27,6 +27,7 @@ export async function transcribeCloudflare(
   const audio = await readFile(audioPath);
   const body: Record<string, string> = { audio: audio.toString("base64") };
   if (opts.language) body.language = opts.language;
+  if (opts.prompt) body.initial_prompt = opts.prompt;
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${p.model}`;
   const res = await (opts.fetchImpl ?? fetch)(url, {
     method: "POST",

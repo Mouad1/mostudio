@@ -1,9 +1,9 @@
 {
   "name": "transcribe",
-  "version": "3",
+  "version": "5",
   "inputs": ["media/ingest.json"],
   "outputs": ["transcript/audio.wav", "transcript/words.json"],
-  "params": { "language": "string?", "prefer": "string?" },
+  "params": { "language": "string?", "prefer": "string?", "dialect": "string?", "prompt": "string?" },
   "private": true,
   "gate": [
     { "metric": "pctTimestamped", "op": ">=", "value": 95, "level": "fail" },
