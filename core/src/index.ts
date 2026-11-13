@@ -44,3 +44,5 @@ export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
 export { approveStep, parseWorkflow, pendingApprovals, readProjectWorkflow, runWorkflow, stepParams, WorkflowMismatchError, WorkflowParamError } from "./workflow.ts";
 export type { RunWorkflowOptions, Workflow, WorkflowResult } from "./workflow.ts";
 export { findWorkspace, loadProvidersFile, PACKAGE_ROOT, resolveShared } from "./workspace.ts";
+export { checkSystem, versionAtLeast } from "./system.ts";
+export type { Check, CheckName, SystemDeps } from "./system.ts";
