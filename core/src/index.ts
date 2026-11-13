@@ -16,6 +16,7 @@ export type { Ledger } from "./ledger.ts";
 export { evaluateGate, mergeThresholds } from "./gate.ts";
 export { getSecret, loadConfig, loadEnvFile } from "./config.ts";
 export type { Config, Secret } from "./config.ts";
+export { formatEnvValue, maskSecret, updateEnvFile } from "./envfile.ts";
 export { createRegistry, NoProviderError } from "./providers/registry.ts";
 export { parseProviders } from "./providers/parse.ts";
 export type { Capability, PickedProvider, PickOptions, ProviderEntry, ProviderRegistry } from "./providers/registry.ts";
