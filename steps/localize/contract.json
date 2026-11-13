@@ -1,0 +1,20 @@
+{
+  "name": "localize",
+  "version": "3",
+  "inputs": [
+    "transcript/words.json",
+    "cut/edl.json"
+  ],
+  "outputs": [
+    "localize/units.json"
+  ],
+  "params": {
+    "lang": "string?",
+    "prefer": "string?"
+  },
+  "private": true,
+  "gate": [
+    { "metric": "arabicScriptPct", "op": "==", "value": 0, "level": "warn" },
+    { "metric": "fallbackUnits", "op": "==", "value": 0, "level": "warn" }
+  ]
+}
