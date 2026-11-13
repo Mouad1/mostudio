@@ -7,3 +7,17 @@ node_modules/
 .hyperframes/
 .DS_Store
 *-E
+
+# Media files (personal footage, audio recordings & inspiration assets)
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.flac
+examples/**/media/
+inspiration/**/media/
