@@ -95,7 +95,7 @@ type VerboseJson = {
 export async function transcribeAudio(
   p: PickedProvider,
   audioPath: string,
-  opts: { language?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {},
+  opts: { language?: string; prompt?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {},
 ): Promise<{
   language: string;
   words: Word[];
@@ -116,6 +116,7 @@ export async function transcribeAudio(
   form.append("timestamp_granularities[]", "word");
   form.append("timestamp_granularities[]", "segment");
   if (opts.language) form.append("language", opts.language);
+  if (opts.prompt) form.append("prompt", opts.prompt);
   const data = (await post(
     p,
     url,

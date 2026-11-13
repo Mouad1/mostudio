@@ -124,6 +124,22 @@ test("transcribeAudio falls back to opts.language / unknown", async () => {
     const f = fakeFetch(200, { words: [], segments: [] });
     assert.equal((await transcribeAudio(provider(), wav, { fetchImpl: f.impl })).language, "unknown");
     assert.equal((await transcribeAudio(provider(), wav, { language: "fr", fetchImpl: f.impl })).language, "fr");
+    assert.equal((f.seen[0]?.init.body as FormData).get("prompt"), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("transcribeAudio sends the prompt form field when given", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mostudio-oai-"));
+  try {
+    const wav = join(dir, "a.wav");
+    await writeFile(wav, "x");
+    const f = fakeFetch(200, { words: [], segments: [] });
+    await transcribeAudio(provider(), wav, { language: "ar", prompt: "دابا غادي نشرح", fetchImpl: f.impl });
+    const form = f.seen[0]?.init.body as FormData;
+    assert.equal(form.get("prompt"), "دابا غادي نشرح");
+    assert.equal(form.get("language"), "ar");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

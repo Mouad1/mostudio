@@ -35,6 +35,8 @@ export type { ParamType, RunStepOptions, StepContext, StepContract, StepModule, 
 export { clampKeeps, durationBound, keepDuration, mapToCut, normalizeWordTimings } from "./timeline.ts";
 export { wavDuration } from "./audio/wav.ts";
 export type { Range } from "./timeline.ts";
+export { unitsToWords } from "./units.ts";
+export type { Unit } from "./units.ts";
 export { quietestPoint, rmsEnvelope } from "./audio/envelope.ts";
 export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.ts";
 export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
