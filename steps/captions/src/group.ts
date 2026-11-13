@@ -31,6 +31,15 @@ export function toCutWords(words: Word[], keep: Range[]): CutWord[] {
   return out;
 }
 
+/** Words already on the cut timeline -> CutWords: `seg` is the first keep whose cut-end is at or after the word's midpoint (the last keep for anything past the end). */
+export function withSegments(words: Word[], segEnds: number[]): CutWord[] {
+  return words.map((w) => {
+    const mid = (w.start + w.end) / 2;
+    const i = segEnds.findIndex((e) => mid <= e + 1e-9);
+    return { w: w.w, start: r3(w.start), end: r3(w.end), seg: i < 0 ? Math.max(0, segEnds.length - 1) : i };
+  });
+}
+
 /** Group cut-timeline words into cues. Never crosses a keep boundary; min 0.5 s (extended into the following gap, never past the cut-end of its keep), max 5 s. */
 export function buildCues(words: CutWord[], style: CaptionStyle, segEnds: number[]): Cue[] {
   const groups: CutWord[][] = [];

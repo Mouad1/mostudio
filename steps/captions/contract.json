@@ -1,10 +1,11 @@
 {
   "name": "captions",
-  "version": "2",
+  "version": "3",
   "inputs": [
     "media/ingest.json",
     "transcript/words.json",
     "cut/edl.json",
+    "localize/units.json",
     "edits/*"
   ],
   "outputs": [

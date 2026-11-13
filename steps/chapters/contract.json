@@ -1,9 +1,10 @@
 {
   "name": "chapters",
-  "version": "3",
+  "version": "4",
   "inputs": [
     "transcript/words.json",
-    "cut/edl.json"
+    "cut/edl.json",
+    "localize/units.json"
   ],
   "outputs": [
     "chapters/chapters.json",

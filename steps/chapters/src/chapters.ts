@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { chatComplete, clampKeeps, durationBound, keepDuration, mapToCut, NoProviderError, normalizeWordTimings, readJson, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
-import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
+import { chatComplete, clampKeeps, durationBound, keepDuration, mapToCut, NoProviderError, normalizeWordTimings, readJson, unitsToWords, withProvider, writeJsonAtomic } from "../../../core/src/index.ts";
+import type { Range, StepContract, StepModule, Unit, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildMessages, buildTranscript, mmss } from "./prompt.ts";
 
@@ -28,6 +28,14 @@ function toCut(words: Word[], keep: Range[]): Word[] {
     out.push({ w: w.w, start: round3(start), end: round3(end) });
   }
   return out;
+}
+
+/** Title language for a localize lang; undefined for `source` (titles follow the transcript). */
+export function titleLanguage(lang: string | undefined): string | undefined {
+  if (lang === "arabizi") return "Moroccan Darija written in Arabizi (Latin letters)";
+  if (lang === "fr") return "French";
+  if (lang === "en") return "English";
+  return undefined;
 }
 
 export function formatYoutube(chs: Chapter[]): string {
@@ -144,8 +152,12 @@ export const chapters: StepModule = {
     const outDur = Math.min(durationBound(edl.outDurationSec), keepDuration(keep));
     // words.json from transcribe v2 is already normalized; this covers older files
     const source = normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
-    const words = toCut(source, keep);
-    const language = typeof ctx.params.language === "string" && ctx.params.language !== "" ? ctx.params.language : undefined;
+    const loc = await readJson<{ lang?: string; units?: Unit[] }>(join(ctx.projectDir, "localize", "units.json"));
+    const localized = loc?.lang !== undefined && loc.lang !== "source";
+    // localized units are already on the cut timeline
+    const words = localized ? unitsToWords(loc.units ?? []) : toCut(source, keep);
+    const language =
+      typeof ctx.params.language === "string" && ctx.params.language !== "" ? ctx.params.language : localized ? titleLanguage(loc.lang) : undefined;
     const prefer = typeof ctx.params.prefer === "string" && ctx.params.prefer !== "" ? ctx.params.prefer : undefined;
 
     let list: Chapter[];

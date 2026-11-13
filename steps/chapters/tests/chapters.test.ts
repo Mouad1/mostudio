@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, afterEach, before, test } from "node:test";
 import type { Config, PickedProvider, ProviderRegistry, Word } from "../../../core/src/index.ts";
 import { NoProviderError, runStep, writeJsonAtomic } from "../../../core/src/index.ts";
-import { chapters, formatYoutube, parseChapters, postProcess } from "../src/chapters.ts";
+import { chapters, formatYoutube, parseChapters, postProcess, titleLanguage } from "../src/chapters.ts";
 import { buildTranscript } from "../src/prompt.ts";
 
 const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
@@ -51,7 +51,7 @@ afterEach(() => {
 let dir: string;
 before(async () => {
   dir = await mkdtemp(join(tmpdir(), "mostudio-chapters-"));
-  for (const d of ["transcript", "cut"]) await mkdir(join(dir, d), { recursive: true });
+  for (const d of ["transcript", "cut", "localize"]) await mkdir(join(dir, d), { recursive: true });
 });
 after(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -68,7 +68,8 @@ function talk(n: number, every = 20): Word[] {
   }
   return out;
 }
-async function seed(words: Word[], keep: { start: number; end: number }[]) {
+async function seed(words: Word[], keep: { start: number; end: number }[], localized: object = { lang: "source", units: [] }) {
+  await writeJsonAtomic(join(dir, "localize", "units.json"), localized);
   await writeJsonAtomic(join(dir, "transcript", "words.json"), { language: "en", words, segments: [] });
   await writeJsonAtomic(join(dir, "cut", "edl.json"), { source: "m.mp4", fadeSec: 0.01, keep, removed: [], outDurationSec: keep.reduce((s, k) => s + k.end - k.start, 0) });
 }
@@ -195,4 +196,27 @@ test("chapters use the clamped duration (edl sourceDurationSec) like mix and ass
   const r = await run(["gem"]);
   assert.equal(r.metrics.chapterCount, 1);
   assert.equal(bodies.length, 0);
+});
+
+test("titleLanguage maps localize langs", () => {
+  assert.equal(titleLanguage("arabizi"), "Moroccan Darija written in Arabizi (Latin letters)");
+  assert.equal(titleLanguage("fr"), "French");
+  assert.equal(titleLanguage("en"), "English");
+  assert.equal(titleLanguage("source"), undefined);
+  assert.equal(titleLanguage(undefined), undefined);
+});
+
+test("localized units feed the transcript and set the title language", async () => {
+  const units = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, start: i * 10, end: i * 10 + 8, text: `daba ghadi n3awd ${i}`, src: "دابا" }));
+  await seed([W("دابا", 0, 1)], [{ start: 0, end: 300 }], { lang: "arabizi", units });
+  fakeLlm({ gem: JSON.stringify({ chapters: [{ start: 0, title: "Bdaya" }, { start: 100, title: "L'outil" }, { start: 200, title: "Lkhatima" }] }) });
+  const r = await run(["gem"]);
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  const user = bodies[0]?.body.messages.find((m) => m.role === "user")?.content ?? "";
+  assert.match(user, /daba ghadi n3awd 0/);
+  assert.doesNotMatch(user, /دابا/);
+  assert.match(user, /Moroccan Darija written in Arabizi/);
+  fakeLlm({ gem: JSON.stringify({ chapters: [{ start: 0, title: "A" }, { start: 100, title: "B" }, { start: 200, title: "C" }] }) });
+  await run(["gem"], { language: "German" });
+  assert.match(bodies[0]?.body.messages.find((m) => m.role === "user")?.content ?? "", /German/);
 });

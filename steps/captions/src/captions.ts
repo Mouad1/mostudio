@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { normalizeWordTimings, readJson, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
-import type { Range, StepContract, StepModule, Word } from "../../../core/src/index.ts";
+import { normalizeWordTimings, readJson, unitsToWords, writeJsonAtomic, writeOutputAtomic } from "../../../core/src/index.ts";
+import type { Range, StepContract, StepModule, Unit, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
 import { buildAss } from "./ass.ts";
-import { buildCues, toCutWords } from "./group.ts";
+import { buildCues, toCutWords, withSegments } from "./group.ts";
 import type { CaptionStyle } from "./group.ts";
 import { applyReplacements, parseReplacementsWithStats } from "./replace.ts";
 import { buildReviewText, buildSrt } from "./srt.ts";
@@ -29,8 +29,13 @@ export const captions: StepModule = {
     const edl = await readJson<{ keep: Range[] }>(join(ctx.projectDir, "cut", "edl.json"));
     if (!edl || !Array.isArray(edl.keep)) throw new Error("cut/edl.json has no keep list");
     const keep = edl.keep;
+    const loc = await readJson<{ lang?: string; units?: Unit[] }>(join(ctx.projectDir, "localize", "units.json"));
+    const localized = loc?.lang !== undefined && loc.lang !== "source";
+    // lang=source: per-word source timings. Otherwise localize already placed lines on the cut timeline.
     // words.json from transcribe v2 is already normalized; this covers older files
-    const source = normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
+    const source = localized
+      ? unitsToWords(loc.units ?? [])
+      : normalizeWordTimings((tr?.words ?? []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end >= w.start));
 
     let repText = "";
     try {
@@ -41,9 +46,9 @@ export const captions: StepModule = {
     const { rules, ignored } = parseReplacementsWithStats(repText);
     const replaced = applyReplacements(source, rules);
 
-    const cutWords = toCutWords(replaced.words, keep);
     let acc = 0;
     const segEnds = keep.map((k) => (acc += k.end - k.start));
+    const cutWords = localized ? withSegments(replaced.words, segEnds) : toCutWords(replaced.words, keep);
     const cues = buildCues(cutWords, style, segEnds);
 
     const outDir = join(ctx.projectDir, "captions");
@@ -63,7 +68,7 @@ export const captions: StepModule = {
       arabicScriptPct: cutWords.length === 0 ? 0 : round1((100 * cutWords.filter((w) => ARABIC.test(w.w)).length) / cutWords.length),
       style,
     };
-    ctx.log(`captions ${style}: ${cues.length} cues, ${replaced.applied} replacements, ${ignored} rules ignored`);
+    ctx.log(`captions ${style}${localized ? ` (${loc.lang})` : ""}: ${cues.length} cues, ${replaced.applied} replacements, ${ignored} rules ignored`);
     return {
       metrics,
       artifacts: ["captions/cues.json", "captions/captions.srt", "captions/captions.ass", "captions/captions.txt"],

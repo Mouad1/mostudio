@@ -7,7 +7,7 @@ import type { Config, ProviderRegistry, Word } from "../../../core/src/index.ts"
 import { runStep, writeJsonAtomic } from "../../../core/src/index.ts";
 import { assDialogueText, buildAss, escapeAssText, formatAssTimestamp } from "../src/ass.ts";
 import { captions } from "../src/captions.ts";
-import { buildCues, toCutWords } from "../src/group.ts";
+import { buildCues, toCutWords, withSegments } from "../src/group.ts";
 import { applyReplacements, parseReplacements } from "../src/replace.ts";
 import { buildSrt, formatSrtTimestamp } from "../src/srt.ts";
 
@@ -22,7 +22,7 @@ const registry: ProviderRegistry = {
 let dir: string;
 before(async () => {
   dir = await mkdtemp(join(tmpdir(), "mostudio-captions-"));
-  for (const d of ["media", "transcript", "cut", "edits"]) await mkdir(join(dir, d), { recursive: true });
+  for (const d of ["media", "transcript", "cut", "edits", "localize"]) await mkdir(join(dir, d), { recursive: true });
 });
 after(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -33,7 +33,8 @@ const W = (w: string, start: number, end: number): Word => ({ w, start, end });
 function seq(texts: string[], t0 = 0, step = 0.3): Word[] {
   return texts.map((t, i) => W(t, t0 + i * step, t0 + (i + 1) * step));
 }
-async function seed(words: Word[], keep: { start: number; end: number }[], rep = "", ingest: object = { width: 1920, height: 1080 }) {
+async function seed(words: Word[], keep: { start: number; end: number }[], rep = "", ingest: object = { width: 1920, height: 1080 }, localized: object = { lang: "source", units: [] }) {
+  await writeJsonAtomic(join(dir, "localize", "units.json"), localized);
   await writeJsonAtomic(join(dir, "media", "ingest.json"), { file: "media/c.mp4", durationSec: 60, ...ingest });
   await writeJsonAtomic(join(dir, "transcript", "words.json"), { language: "en", words });
   await writeJsonAtomic(join(dir, "cut", "edl.json"), { source: "media/c.mp4", fadeSec: 0.01, keep, removed: [], outDurationSec: keep.reduce((s, k) => s + k.end - k.start, 0) });
@@ -208,4 +209,37 @@ test("contract lists ingest.json and changing its size re-runs the step", async 
   const c = await run();
   assert.notEqual(c.inputsHash, a.inputsHash);
   assert.equal(c.cached, false);
+});
+
+test("withSegments assigns each cut-timeline word to its keep by midpoint", () => {
+  const out = withSegments([W("a", 0, 1), W("b", 1.9, 2.3), W("c", 2.5, 3), W("late", 9, 9.5)], [2, 4]);
+  assert.deepEqual(out.map((w) => w.seg), [0, 1, 1, 1]);
+  assert.deepEqual(out[0], { w: "a", start: 0, end: 1, seg: 0 });
+});
+
+test("localized units replace source words: no Arabic script, replacements still applied, cues never cross a cut", async () => {
+  const units = [
+    { id: 1, start: 0.5, end: 1.5, text: "salam a sahbi", src: "سلام اصاحبي" },
+    { id: 2, start: 2, end: 3.5, text: "daba ghadi nchr7 l'outil", src: "دابا غادي نشرح الوتي" },
+  ];
+  // source words in Arabic script are ignored; keeps: 0..2 and 10..12 in source -> cut segEnds [2, 4]
+  await seed(seq(["سلام", "اصاحبي"], 0.5, 0.5), [{ start: 0, end: 2 }, { start: 10, end: 12 }], "sahbi => S7abi", undefined, { lang: "arabizi", units });
+  const r = await run();
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.arabicScriptPct, 0);
+  assert.equal(r.metrics.replacementsApplied, 1);
+  const cues = JSON.parse(await readFile(join(dir, "captions", "cues.json"), "utf8"));
+  assert.deepEqual(cues.map((c: { text: string }) => c.text), ["salam a S7abi", "daba ghadi nchr7 l'outil"]);
+  assert.equal(cues[0].start, 0.5);
+  assert.equal(cues[1].end, 3.5);
+  const txt = await readFile(join(dir, "captions", "captions.txt"), "utf8");
+  assert.doesNotMatch(txt, /[\u0600-\u06FF]/);
+});
+
+test("localize lang=source keeps the per-word source path", async () => {
+  await seed(seq(["salam", "مرحبا"]), [{ start: 0, end: 10 }], "", undefined, { lang: "source", units: [{ id: 1, start: 0, end: 1, text: "ignored", src: "" }] });
+  const r = await run();
+  const txt = await readFile(join(dir, "captions", "captions.txt"), "utf8");
+  assert.match(txt, /salam مرحبا/);
+  assert.equal(r.metrics.arabicScriptPct, 50);
 });
