@@ -159,6 +159,9 @@ test("shipped workflows parse against the real step names", async () => {
     const json = JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "workflows", `${f}.json`), "utf8"));
     const w = parseWorkflow(json, names);
     assert.equal(w.name, f);
+    const order = w.steps.map((x) => x.step);
+    assert.equal(order[order.indexOf("cut") + 1], "localize", `${f}: localize runs right after cut`);
+    assert.ok(order.indexOf("localize") < order.indexOf("captions"), f);
   }
 });
 

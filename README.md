@@ -9,6 +9,46 @@ Status: pre-alpha.
 - Node >= 22.18 (runs TypeScript directly)
 - ffmpeg
 
+## Directory Structure & Personal Files
+
+To keep personal assets, API secrets, and raw video footage separate from the source code, organize your personal files according to the following layout:
+
+```
+mostudio/
+├── .env.local             # Personal API keys (Groq, Gemini, Cloudflare, etc. - gitignored)
+├── projects/              # Working video projects (gitignored)
+│   └── <project-slug>/    # Individual project workspace (source footage, transcripts, cache, renders)
+├── inspiration/           # Creative reference links, style benchmarks, and notes
+│   ├── shorts/links.txt   # Short-form video inspiration URLs (Reels, TikToks, Shorts)
+│   └── long/links.txt     # Long-form video inspiration URLs (YouTube)
+├── examples/              # Sample workflows, demo project templates, and mock inputs
+│   └── README.md          # Guide & template layout for example projects
+└── spikes/                # Local tech spikes and experiments
+    └── */media/           # Test audio/video files used for benchmarks (gitignored)
+```
+
+### Where to Place Your Files:
+
+1. **API Keys & Credentials:**
+   - Store in `.env.local` (copy from `.env.example`). This file is gitignored.
+   - Or use Bitwarden Secrets Manager via `cli/bin/mostudio-bws`.
+
+2. **Video Projects & Personal Media (`projects/`):**
+   - Create a project: `mostudio new --project projects/<slug>` (e.g. `projects/my-video`).
+   - Place your raw camera footage, audio tracks, or recordings inside that project directory.
+   - Run workflows pointing to it: `mostudio run short --project projects/<slug>`.
+   - All contents inside `projects/` are gitignored to ensure personal footage and intermediate cache files are never committed to version control.
+
+3. **Inspirations & References (`inspiration/`):**
+   - Store URLs of videos, reels, editing styles, or music references you want to model.
+   - Add URLs to `inspiration/shorts/links.txt` for 9:16 vertical content (Instagram Reels, TikTok, YouTube Shorts).
+   - Add URLs to `inspiration/long/links.txt` for 16:9 landscape content (YouTube, interviews, podcasts).
+   - Add text or markdown notes for pacing, hooks, or sound design ideas. See [inspiration/README.md](inspiration/README.md).
+
+4. **Examples & Templates (`examples/`):**
+   - Place reproducible project structures, sample JSON parameters, or mock caption fixtures in `examples/`.
+   - See [examples/README.md](examples/README.md) for detailed layout specifications.
+
 ## API keys
 
 Free-tier provider keys (Groq, Gemini, …) are read from the environment. Two ways to provide them:
@@ -19,6 +59,12 @@ Free-tier provider keys (Groq, Gemini, …) are read from the environment. Two w
 ## Workflows
 
 `workflows/<name>.json` chains steps; `mostudio run <name> --project <dir>` runs them in order, skipping cached steps, and stops at the first failure. Shipped: `rough-cut` (16:9, youtube preset) and `short` (9:16, tight pace, shorts preset).
+
+Captions for a Moroccan Darija video: `--param transcribe.dialect=darija` keeps the transcript in Darija (forced-Arabic pass with a Darija prompt, auto language only for windows spoken in French/English; add names and terms with `--param "transcribe.prompt=..."`), and `--param localize.lang=arabizi|fr|en` puts captions and chapter titles in the audience's language (`arabizi` = Darija in Latin letters). The default `localize.lang=source` keeps the transcript as is.
+
+```
+mostudio run short --project projects/<slug> --param transcribe.dialect=darija --param localize.lang=arabizi
+```
 
 ```
 mostudio run rough-cut --project projects/<slug> [--param <step>.<key>=<value>]... [--force <step>]... [--json]
