@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveBin, runBin, runBinCapture } from "./proc.ts";
+import { CancelledError, currentSignal, resolveBin, runBin, runBinCapture, runWithSignal } from "./proc.ts";
 
 test("resolveBin defaults to the binary name", () => {
   assert.equal(resolveBin("ffmpeg", {}), "ffmpeg");
@@ -96,4 +96,34 @@ test("pickH264Encoder prefers videotoolbox, falls back to libx264, env forces so
 test("runBinCapture returns stdout and stderr", async () => {
   const r = await runBinCapture(process.execPath, ["-e", "process.stdout.write('o');process.stderr.write('e')"]);
   assert.deepEqual(r, { stdout: "o", stderr: "e" });
+});
+
+test("currentSignal returns active signal within runWithSignal", async () => {
+  assert.equal(currentSignal(), undefined);
+  const ac = new AbortController();
+  await runWithSignal(ac.signal, async () => {
+    assert.equal(currentSignal(), ac.signal);
+  });
+  assert.equal(currentSignal(), undefined);
+});
+
+test("already-aborted signal rejects immediately", async () => {
+  const ac = new AbortController();
+  ac.abort();
+  await assert.rejects(
+    runWithSignal(ac.signal, () => runBin("sleep", ["30"])),
+    (err: unknown) => err instanceof CancelledError,
+  );
+});
+
+test("aborting kills the child quickly", async () => {
+  const ac = new AbortController();
+  const start = Date.now();
+  setTimeout(() => ac.abort(), 100);
+  await assert.rejects(
+    runWithSignal(ac.signal, () => runBin("sleep", ["30"])),
+    (err: unknown) => err instanceof CancelledError,
+  );
+  const duration = Date.now() - start;
+  assert.ok(duration < 2000, `expected duration < 2000ms, got ${duration}ms`);
 });

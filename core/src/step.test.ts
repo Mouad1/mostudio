@@ -7,6 +7,7 @@ import { after, before, beforeEach, test } from "node:test";
 import type { Config } from "./config.ts";
 import { latest, readLedger } from "./ledger.ts";
 import type { ProviderRegistry } from "./providers/registry.ts";
+import { CancelledError } from "./proc.ts";
 import { runStep } from "./step.ts";
 import type { StepContract, StepModule } from "./step.ts";
 import type { Threshold } from "./types.ts";
@@ -554,4 +555,22 @@ test("failNote becomes the error of a gate-failed result only", async () => {
   const good = await runStep(dir, mk(2), { ...base(), force: true });
   assert.equal(good.status, "pass");
   assert.equal(good.error, undefined);
+});
+
+test("runStep records cancelled by user and clears the marker", async () => {
+  const ac = new AbortController();
+  const { mod } = makeFake();
+  mod.run = async (ctx) => {
+    assert.equal(existsSync(join(ctx.projectDir, "steps", "fake.running")), true);
+    ac.abort();
+    throw new CancelledError();
+  };
+  const r = await runStep(dir, mod, { ...base(), signal: ac.signal, force: true });
+  assert.equal(r.status, "fail");
+  assert.equal(r.error, "cancelled by user");
+  assert.equal(existsSync(join(dir, "steps", "fake.running")), false);
+  const ledger = await readLedger(dir);
+  const last = latest(ledger, "fake");
+  assert.equal(last?.status, "fail");
+  assert.equal(last?.error, "cancelled by user");
 });

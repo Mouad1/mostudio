@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import { CancelledError, currentSignal } from "../proc.ts";
 import { NonRetryableError, parseRetryAfter, ProviderHttpError } from "./call.ts";
 import type { PickedProvider } from "./registry.ts";
 
@@ -22,9 +23,27 @@ function bearer(p: PickedProvider): string {
 
 /** POST and return the OK response; a non-2xx becomes a ProviderHttpError with the key redacted from its body. */
 async function request(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<Response> {
-  const res = await f(url, { ...init, method: "POST", signal: AbortSignal.timeout(timeoutMs) });
+  const cur = currentSignal();
+  if (cur?.aborted) throw new CancelledError();
+  const sigs = [AbortSignal.timeout(timeoutMs)];
+  if (cur) sigs.push(cur);
+  const signal = AbortSignal.any(sigs);
+  let res: Response;
+  try {
+    res = await f(url, { ...init, method: "POST", signal });
+  } catch (err) {
+    if (cur?.aborted) throw new CancelledError();
+    throw err;
+  }
+  if (cur?.aborted) throw new CancelledError();
   if (!res.ok) {
-    let redacted = await res.text();
+    let redacted: string;
+    try {
+      redacted = await res.text();
+    } catch (err) {
+      if (cur?.aborted) throw new CancelledError();
+      throw err;
+    }
     const secret = p.key?.reveal();
     if (secret) redacted = redacted.split(secret).join("[redacted]");
     const snippet = redacted.slice(0, 200);
@@ -34,10 +53,21 @@ async function request(p: PickedProvider, url: string, init: RequestInit, f: Fet
 }
 
 async function post(p: PickedProvider, url: string, init: RequestInit, f: FetchLike, timeoutMs: number): Promise<unknown> {
-  const text = await (await request(p, url, init, f, timeoutMs)).text();
+  const cur = currentSignal();
+  if (cur?.aborted) throw new CancelledError();
+  const res = await request(p, url, init, f, timeoutMs);
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err) {
+    if (cur?.aborted) throw new CancelledError();
+    throw err;
+  }
+  if (cur?.aborted) throw new CancelledError();
   try {
     return JSON.parse(text);
   } catch {
+    if (cur?.aborted) throw new CancelledError();
     throw new Error(`${p.id}: response was not JSON`);
   }
 }
@@ -56,9 +86,18 @@ export async function postJson(p: PickedProvider, path: string, body: unknown, o
 
 /** POST a JSON body and return the raw reply bytes (e.g. TTS audio, image data). */
 export async function postBinary(p: PickedProvider, path: string, body: unknown, opts: PostOptions = {}): Promise<Uint8Array> {
+  const cur = currentSignal();
+  if (cur?.aborted) throw new CancelledError();
   const url = endpoint(p, path);
   const res = await request(p, url, jsonInit(p, body, opts.headers), opts.fetchImpl ?? fetch, opts.timeoutMs ?? 300_000);
-  return new Uint8Array(await res.arrayBuffer());
+  let buf: ArrayBuffer;
+  try {
+    buf = await res.arrayBuffer();
+  } catch (err) {
+    if (cur?.aborted) throw new CancelledError();
+    throw err;
+  }
+  return new Uint8Array(buf);
 }
 
 /** Chat message content: plain text, or parts mixing text and images (vision models). */
@@ -101,6 +140,8 @@ export async function transcribeAudio(
   words: Word[];
   segments: { start: number; end: number; text: string; avgLogprob?: number }[];
 }> {
+  const cur = currentSignal();
+  if (cur?.aborted) throw new CancelledError();
   const url = endpoint(p, "/audio/transcriptions");
   const auth = bearer(p);
   let audio: Awaited<ReturnType<typeof readFile>>;

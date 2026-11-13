@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CancelledError, runWithSignal } from "../proc.ts";
 import { NonRetryableError, parseRetryAfter, withProvider, ProviderHttpError } from "./call.ts";
 import { NoProviderError } from "./registry.ts";
 import type { PickedProvider, PickOptions, ProviderRegistry } from "./registry.ts";
@@ -253,4 +254,23 @@ test("withProvider exclude option skips providers from the first pick", async ()
   const out = await withProvider(registry, "stt", async (p) => p.id, { exclude: ["a"] });
   assert.equal(out.result, "b");
   assert.deepEqual(log.picks[0]?.exclude, ["a"]);
+});
+
+test("provider calls stop on abort and are not rotated", async () => {
+  const { registry, log } = fakeRegistry(["a", "b"]);
+  const ac = new AbortController();
+  let calls = 0;
+  await assert.rejects(
+    runWithSignal(ac.signal, () =>
+      withProvider(registry, "stt", async (p) => {
+        calls++;
+        ac.abort();
+        throw new CancelledError();
+      }),
+    ),
+    (e: unknown) => e instanceof CancelledError,
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(log.exhausted, []);
+  assert.deepEqual(log.used, []);
 });

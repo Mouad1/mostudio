@@ -1,6 +1,7 @@
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Config } from "./config.ts";
+import { CancelledError, runWithSignal } from "./proc.ts";
 import { writeJsonAtomic } from "./fs/atomic.ts";
 import { evaluateGate, mergeThresholds } from "./gate.ts";
 import { hashFiles } from "./hash.ts";
@@ -60,6 +61,7 @@ export type RunStepOptions = {
   log?: (msg: string) => void;
   /** Merged env (process env + .env.local). Scanned for secrets to redact; its non-secret part becomes ctx.env. Defaults to process.env. */
   env?: Record<string, string | undefined>;
+  signal?: AbortSignal;
 };
 
 async function isFile(path: string): Promise<boolean> {
@@ -180,6 +182,17 @@ export async function runStep(
   mod: StepModule,
   opts: RunStepOptions,
 ): Promise<StepResult & { cached: boolean }> {
+  if (opts.signal) {
+    return runWithSignal(opts.signal, () => runStepImpl(projectDir, mod, opts));
+  }
+  return runStepImpl(projectDir, mod, opts);
+}
+
+async function runStepImpl(
+  projectDir: string,
+  mod: StepModule,
+  opts: RunStepOptions,
+): Promise<StepResult & { cached: boolean }> {
   const { contract } = mod;
   let startedAt = new Date();
   const redactor = createRedactor([process.env, opts.env]);
@@ -248,13 +261,15 @@ export async function runStep(
     }
     inputsHash = await hashFiles(files, { step: contract.name, version: contract.version ?? "0", params });
   } catch (err) {
+    const cancelled = err instanceof CancelledError || (err as Error)?.name === "CancelledError" || Boolean(opts.signal?.aborted);
     const failed = result({
       status: "fail",
       inputsHash: "",
       durationMs: 0,
-      error: message(err),
+      error: cancelled ? "cancelled by user" : message(err),
     });
     await record(failed);
+    await rm(marker, { force: true });
     return { ...failed, cached: false };
   }
 
@@ -290,6 +305,7 @@ export async function runStep(
   };
   let final: StepResult;
   try {
+    if (opts.signal?.aborted) throw new CancelledError();
     await mkdir(join(projectDir, "steps"), { recursive: true });
     await writeJsonAtomic(marker, { pid: process.pid, startedAt: new Date().toISOString() });
     for (const out of contract.outputs) await rm(resolve(projectDir, out), { force: true });
@@ -320,14 +336,16 @@ export async function runStep(
       });
     }
   } catch (err) {
+    const cancelled = err instanceof CancelledError || (err as Error)?.name === "CancelledError" || Boolean(opts.signal?.aborted);
     final = result({
       status: "fail",
       inputsHash,
       ...withProvider(lastPicked),
-      error: message(err),
+      error: cancelled ? "cancelled by user" : message(err),
     });
+  } finally {
+    await rm(marker, { force: true });
   }
   await record(final);
-  await rm(marker, { force: true });
   return { ...final, cached: false };
 }

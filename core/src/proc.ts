@@ -1,5 +1,23 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+
+export class CancelledError extends Error {
+  constructor() {
+    super("cancelled by user");
+    this.name = "CancelledError";
+  }
+}
+
+const signalStorage = new AsyncLocalStorage<AbortSignal>();
+
+export function runWithSignal<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<T> {
+  return signalStorage.run(signal, fn);
+}
+
+export function currentSignal(): AbortSignal | undefined {
+  return signalStorage.getStore();
+}
 
 const TIMEOUT_MS = 120_000;
 
@@ -18,17 +36,51 @@ export function resolveBin(name: BinName, env: Record<string, string | undefined
 
 type Captured = { stdout: string; stderr: string };
 
-function execCapture(bin: string, args: string[], timeoutMs: number): Promise<Captured> {
+async function execCapture(bin: string, args: string[], timeoutMs: number): Promise<Captured> {
+  const sig = currentSignal();
+  if (sig?.aborted) throw new CancelledError();
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, shell: false }, (err, stdout, stderr) => {
-      if (!err) return resolve({ stdout, stderr });
-      const e = err as NodeJS.ErrnoException & { killed?: boolean };
-      if (e.code === "ENOENT") {
-        return reject(new Error(`${bin} not found; install it or set FFMPEG / FFPROBE / WHISPER_CLI in .env.local`));
-      }
-      if (e.killed) return reject(new Error(`${bin} timed out after ${timeoutMs}ms`));
-      reject(new Error(`${bin} failed: ${String(stderr).trim().split("\n").slice(-3).join(" ") || e.message}`));
-    });
+    let killTimer: NodeJS.Timeout | undefined;
+    const onAbort = () => {
+      killTimer = setTimeout(() => {
+        try {
+          if (child.exitCode === null && child.signalCode === null) {
+            child.kill("SIGKILL");
+          }
+        } catch {
+          // ignore
+        }
+      }, 1500);
+      killTimer.unref();
+    };
+    if (sig) {
+      sig.addEventListener("abort", onAbort, { once: true });
+    }
+    const child = execFile(
+      bin,
+      args,
+      {
+        timeout: timeoutMs,
+        maxBuffer: 64 * 1024 * 1024,
+        shell: false,
+        signal: sig,
+        killSignal: "SIGTERM",
+      },
+      (err, stdout, stderr) => {
+        if (sig) sig.removeEventListener("abort", onAbort);
+        if (killTimer) clearTimeout(killTimer);
+        if (!err) return resolve({ stdout, stderr });
+        if (sig?.aborted || err.name === "AbortError") {
+          return reject(new CancelledError());
+        }
+        const e = err as NodeJS.ErrnoException & { killed?: boolean };
+        if (e.code === "ENOENT") {
+          return reject(new Error(`${bin} not found; install it or set FFMPEG / FFPROBE / WHISPER_CLI in .env.local`));
+        }
+        if (e.killed) return reject(new Error(`${bin} timed out after ${timeoutMs}ms`));
+        reject(new Error(`${bin} failed: ${String(stderr).trim().split("\n").slice(-3).join(" ") || e.message}`));
+      },
+    );
   });
 }
 
@@ -37,7 +89,7 @@ export async function runBin(bin: string, args: string[], timeoutMs = TIMEOUT_MS
   return (await execCapture(bin, args, timeoutMs)).stdout;
 }
 
-/** Like runBin but also returns stderr (e.g. ffmpeg's loudnorm JSON report). */
+/** Like runBin but also returns stderr (e.g. ffmpeg\'s loudnorm JSON report). */
 export function runBinCapture(bin: string, args: string[], timeoutMs = TIMEOUT_MS): Promise<Captured> {
   return execCapture(bin, args, timeoutMs);
 }

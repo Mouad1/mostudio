@@ -1,3 +1,4 @@
+import { CancelledError, currentSignal } from "../proc.ts";
 import { NoProviderError } from "./registry.ts";
 import type { Capability, PickedProvider, ProviderRegistry } from "./registry.ts";
 
@@ -89,6 +90,8 @@ export async function withProvider<T>(
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const attempts: Attempt[] = [];
   for (;;) {
+    const cur = currentSignal();
+    if (cur?.aborted) throw new CancelledError();
     let p: PickedProvider;
     try {
       p = await providers.pick(capability, {
@@ -97,19 +100,21 @@ export async function withProvider<T>(
         exclude: [...(opts.exclude ?? []), ...attempts.map((a) => a.id)],
       });
     } catch (e) {
+      if (e instanceof CancelledError) throw e;
       if (e instanceof NoProviderError && attempts.length > 0) throw withAttempts(e, capability, attempts);
       throw e;
     }
     let result: T;
     try {
       result = await fn(p).catch(async (e: unknown) => {
+        if (e instanceof CancelledError) throw e;
         const wait = e instanceof ProviderHttpError && e.status === 429 ? e.retryAfterSec : undefined;
         if (wait === undefined || wait > MAX_WAIT_SEC) throw e;
         await sleep(wait * 1000);
         return fn(p);
       });
     } catch (e) {
-      if (e instanceof NonRetryableError) throw e;
+      if (e instanceof NonRetryableError || e instanceof CancelledError) throw e;
       const error = e instanceof Error ? e.message : String(e);
       attempts.push({ id: p.id, error, ...(e instanceof ProviderHttpError ? { status: e.status } : {}) });
       if (e instanceof ProviderHttpError && e.status === 429) await providers.markExhausted(p.id, undefined, capability);

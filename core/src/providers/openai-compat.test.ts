@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { CancelledError, runWithSignal } from "../proc.ts";
 import { getSecret } from "../config.ts";
 import { NonRetryableError, ProviderHttpError } from "./call.ts";
 import { withProvider } from "./call.ts";
@@ -250,4 +251,20 @@ test("chatComplete accepts content parts (text + image_url) for vision", async (
   const out = await chatComplete(provider(), [{ role: "user", content }], { fetchImpl: f.impl });
   assert.equal(out, "a red square");
   assert.deepEqual(JSON.parse(String(f.seen[0]?.init.body)).messages, [{ role: "user", content }]);
+});
+
+test("request throws CancelledError when aborted via currentSignal", async () => {
+  const ac = new AbortController();
+  const impl: FetchLike = async (_url, init) => {
+    return new Promise((_, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("The operation was aborted", "AbortError"));
+      });
+    });
+  };
+  setTimeout(() => ac.abort(), 10);
+  await assert.rejects(
+    runWithSignal(ac.signal, () => chatComplete(provider(), [{ role: "user", content: "hi" }], { fetchImpl: impl })),
+    (e: unknown) => e instanceof CancelledError,
+  );
 });

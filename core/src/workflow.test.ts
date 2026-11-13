@@ -332,3 +332,23 @@ test("stepParams merges workflow entry and remembered params", async () => {
   assert.deepEqual(await stepParams(dir, w, "b"), {});
   assert.deepEqual(await stepParams(dir, w, "unknown"), {});
 });
+
+test("runWorkflow stops before the next step once aborted", async () => {
+  const ac = new AbortController();
+  const mods = { a: fake("a"), b: fake("b") };
+  const w = wf([{ step: "a" }, { step: "b" }]);
+  const r = await runWorkflow(dir, w, mods, {
+    ...base(),
+    signal: ac.signal,
+    onStep: (stepRes) => {
+      if (stepRes.step === "a") {
+        ac.abort();
+      }
+    },
+  });
+  assert.equal(r.status, "failed");
+  assert.equal(r.stoppedAt, "b");
+  assert.equal(r.results.length, 1);
+  assert.equal(r.results[0]?.step, "a");
+  assert.equal(calls.b, undefined);
+});

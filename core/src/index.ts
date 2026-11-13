@@ -26,7 +26,7 @@ export { chatComplete, postBinary, postJson, transcribeAudio } from "./providers
 export type { ChatMessage, ContentPart, FetchLike, PostOptions, Word } from "./providers/openai-compat.ts";
 export { nextReset } from "./providers/quota.ts";
 export { createRedactor, publicEnv } from "./redact.ts";
-export { pickH264Encoder, resolveBin, resolveFfmpeg, runBin, runBinCapture } from "./proc.ts";
+export { CancelledError, currentSignal, pickH264Encoder, resolveBin, resolveFfmpeg, runBin, runBinCapture, runWithSignal } from "./proc.ts";
 export type { BinName } from "./proc.ts";
 export type { Redactor } from "./redact.ts";
 export { hyperframesCommand, hyperframesLint, hyperframesRender } from "./hyperframes.ts";

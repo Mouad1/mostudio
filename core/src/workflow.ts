@@ -33,6 +33,7 @@ export type RunWorkflowOptions = Omit<RunStepOptions, "params" | "force" | "gate
   onStepStart?: (step: string) => void;
   /** Called when an approval step is approved (auto or manual). */
   onApprove?: (step: string, auto: boolean) => void;
+  signal?: AbortSignal;
 };
 
 /** A --param naming an unknown step/key or a bad value; nothing is persisted. */
@@ -146,7 +147,7 @@ export async function runWorkflow(
   steps: Record<string, StepModule>,
   opts: RunWorkflowOptions,
 ): Promise<WorkflowResult> {
-  const { params: cliParams, force, onStep, switchWorkflow, autoApprove, onStepStart, onApprove, ...rest } = opts;
+  const { params: cliParams, force, onStep, switchWorkflow, autoApprove, onStepStart, onApprove, signal, ...rest } = opts;
   const results: WorkflowResult["results"] = [];
   const redactor = createRedactor([process.env, rest.env]);
   // Validate before persisting: a typo must not be remembered.
@@ -187,6 +188,7 @@ export async function runWorkflow(
     await writeJsonAtomic(paramsPath(projectDir), next);
   }
   for (const entry of wf.steps) {
+    if (opts.signal?.aborted) return { status: "failed", results, stoppedAt: entry.step };
     const mod = Object.hasOwn(steps, entry.step) ? steps[entry.step] : undefined;
     if (!mod) throw new Error(`unknown step "${entry.step}" in workflow ${wf.name}`);
     if (force?.includes(entry.step) && entry.approve) {
@@ -201,6 +203,7 @@ export async function runWorkflow(
     try {
       result = await runStep(projectDir, mod, {
       ...rest,
+      signal: opts.signal,
       params: { ...entry.params, ...remembered[entry.step] },
       ...(entry.gate ? { gateOverrides: entry.gate } : {}),
       force: force?.includes(entry.step) ?? false,
