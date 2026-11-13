@@ -11,7 +11,7 @@ import { ingest } from "../src/ingest.ts";
 import { probe, snapFps } from "../src/probe.ts";
 import { makeClip } from "./fixtures.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const base = { config, providers: {} as ProviderRegistry, log: () => {} };
 
 let tmp: string;

@@ -11,7 +11,7 @@ import { runStep } from "./step.ts";
 import type { StepContract, StepModule } from "./step.ts";
 import type { Threshold } from "./types.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const providers = {} as ProviderRegistry;
 const silent = () => {};
 

@@ -8,7 +8,7 @@ import { NoProviderError, runStep, writeJsonAtomic } from "../../../core/src/ind
 import { chapters, formatYoutube, parseChapters, postProcess, titleLanguage } from "../src/chapters.ts";
 import { buildTranscript } from "../src/prompt.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const fakeProvider = (id: string): PickedProvider => ({
   id,
   capabilities: ["llm"],

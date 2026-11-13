@@ -6,6 +6,7 @@ import { readJson } from "./fs/atomic.ts";
 export type Config = {
   billing: "free-only" | "allow-paid";
   projectsRoot: string;
+  inspirationRoot: string;
   home: string;
 };
 
@@ -16,7 +17,7 @@ export type Secret = {
   toJSON(): string;
 };
 
-type RawConfig = { billing?: unknown; projectsRoot?: unknown };
+type RawConfig = { billing?: unknown; projectsRoot?: unknown; inspirationRoot?: unknown };
 
 export async function loadConfig(
   repoRoot: string,
@@ -31,9 +32,14 @@ export async function loadConfig(
   if (typeof projectsRoot !== "string") {
     throw new Error("mostudio.config.json: projectsRoot must be a string");
   }
+  const inspirationRoot = raw.inspirationRoot ?? "inspiration";
+  if (typeof inspirationRoot !== "string") {
+    throw new Error("mostudio.config.json: inspirationRoot must be a string");
+  }
   return {
     billing,
     projectsRoot: resolve(repoRoot, projectsRoot),
+    inspirationRoot: resolve(repoRoot, inspirationRoot),
     home: env.MOSTUDIO_HOME ?? join(homedir(), ".mostudio"),
   };
 }

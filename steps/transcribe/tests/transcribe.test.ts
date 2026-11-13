@@ -13,7 +13,7 @@ import { choosePass, DARIJA_PROMPT, darijaPrompt, isFrenchOrEnglish, msaScore, n
 import { dropHallucinations, isHallucination, normalizeText } from "../src/hallucinations.ts";
 import { createTranscribe } from "../src/transcribe.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const ffmpeg = resolveBin("ffmpeg", process.env);
 
 function entry(id: string, kind: PickedProvider["kind"], extra: Partial<PickedProvider> = {}): PickedProvider {

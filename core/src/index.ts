@@ -43,3 +43,4 @@ export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.t
 export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
 export { approveStep, parseWorkflow, pendingApprovals, readProjectWorkflow, runWorkflow, WorkflowMismatchError, WorkflowParamError } from "./workflow.ts";
 export type { RunWorkflowOptions, Workflow, WorkflowResult } from "./workflow.ts";
+export { findWorkspace, loadProvidersFile, PACKAGE_ROOT, resolveShared } from "./workspace.ts";

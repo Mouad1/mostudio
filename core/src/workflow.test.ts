@@ -11,7 +11,7 @@ import type { StepModule } from "./step.ts";
 import { approveStep, parseWorkflow, runWorkflow, WorkflowMismatchError } from "./workflow.ts";
 import type { Workflow } from "./workflow.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const providers = {} as ProviderRegistry;
 const base = () => ({ config, providers, log: () => {} });
 

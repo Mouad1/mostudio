@@ -1,23 +1,26 @@
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+  approveStep,
   createProject,
   createRedactor,
   createRegistry,
+  findWorkspace,
   latest,
   loadConfig,
   loadEnvFile,
-  parseProviders,
-  readJson,
-  readLedger,
+  loadProvidersFile,
+  PACKAGE_ROOT,
   parseWorkflow,
   pendingApprovals,
+  readJson,
+  readLedger,
   readProjectWorkflow,
+  resolveShared,
   runStep,
   runWorkflow,
   WorkflowMismatchError,
   WorkflowParamError,
-  approveStep,
 } from "../../core/src/index.ts";
 import type { ProviderEntry, StepModule, StepResult } from "../../core/src/index.ts";
 import { defaultSteps } from "../../steps/index.ts";
@@ -32,21 +35,11 @@ export type Io = {
   root?: string;
 };
 
-/** Repo root: io.root, else MOSTUDIO_ROOT, else the repo this CLI file lives in. */
+/** Repo root: io.root, else MOSTUDIO_ROOT, else nearest ancestor workspace, else package root. */
 export function rootOf(io: Io): string {
-  return io.root ?? (io.env.MOSTUDIO_ROOT || resolve(import.meta.dirname, "..", ".."));
-}
-
-async function loadProviders(root: string): Promise<ProviderEntry[]> {
-  const path = join(root, "providers.json");
-  let json: unknown;
-  try {
-    json = await readJson<unknown>(path);
-  } catch (err) {
-    throw new Error(`providers.json at ${path} is not valid JSON: ${(err as Error).message}`, { cause: err });
-  }
-  if (json === undefined) throw new Error(`providers.json not found at ${path} (set MOSTUDIO_ROOT to the mostudio repo)`);
-  return parseProviders(json);
+  if (io.root !== undefined) return io.root;
+  if (io.env.MOSTUDIO_ROOT) return io.env.MOSTUDIO_ROOT;
+  return findWorkspace(io.cwd) ?? PACKAGE_ROOT;
 }
 
 const USAGE = `usage:
@@ -159,7 +152,7 @@ async function cmdStep(
   const projectDir = await projectDirOf(p, io);
   await assertProjectDir(projectDir);
   const config = await loadConfig(rootOf(io), env);
-  const entries = await loadProviders(rootOf(io));
+  const entries = await loadProvidersFile(rootOf(io));
   const providers = createRegistry(entries, env, join(config.home, "quota.json"), config.billing);
   // File params are user paths: resolve them against the caller's cwd.
   const params: Record<string, string> = { ...p.params };
@@ -184,7 +177,7 @@ const REVIEW_HINTS: Record<string, string> = {
 };
 
 async function listWorkflows(root: string): Promise<string[]> {
-  const files = await readdir(join(root, "workflows")).catch(() => [] as string[]);
+  const files = await readdir(resolveShared(root, "workflows")).catch(() => [] as string[]);
   return files.filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5)).sort();
 }
 
@@ -204,7 +197,7 @@ async function cmdRun(
   }
   let wf;
   try {
-    wf = parseWorkflow(await readJson<unknown>(join(root, "workflows", `${name}.json`)), Object.keys(steps));
+    wf = parseWorkflow(await readJson<unknown>(join(resolveShared(root, "workflows"), `${name}.json`)), Object.keys(steps));
   } catch (err) {
     io.stderr(`invalid workflow ${name}: ${(err as Error).message}\n`);
     return 64;
@@ -227,7 +220,7 @@ async function cmdRun(
   const projectDir = await projectDirOf(p, io);
   await assertProjectDir(projectDir);
   const config = await loadConfig(root, env);
-  const providers = createRegistry(await loadProviders(root), env, join(config.home, "quota.json"), config.billing);
+  const providers = createRegistry(await loadProvidersFile(root), env, join(config.home, "quota.json"), config.billing);
   const result = await runWorkflow(projectDir, wf, steps, {
     params,
     force: p.forceSteps,
@@ -269,7 +262,7 @@ async function awaitingApproval(projectDir: string, root: string, steps: Record<
   const name = await readProjectWorkflow(projectDir);
   if (!name) return new Set();
   try {
-    const wf = parseWorkflow(await readJson<unknown>(join(root, "workflows", `${name}.json`)), Object.keys(steps));
+    const wf = parseWorkflow(await readJson<unknown>(join(resolveShared(root, "workflows"), `${name}.json`)), Object.keys(steps));
     return new Set(await pendingApprovals(projectDir, wf));
   } catch {
     return new Set(); // workflow file gone or invalid: status still lists results

@@ -248,16 +248,24 @@ test("root defaults to MOSTUDIO_ROOT, then the CLI's own repo", () => {
   assert.equal(rootOf({ ...base, env: { MOSTUDIO_ROOT: "" } }), join(import.meta.dirname, "..", ".."));
   assert.ok(existsSync(join(rootOf({ ...base, env: {} }), "providers.json")));
   assert.equal(rootOf({ ...base, env: { MOSTUDIO_ROOT: "/a" }, root: "/b" }), "/b");
+
+  // finds workspace via findWorkspace(cwd)
+  const ws = mkdtempSync(join(tmpdir(), "mostudio-ws-root-"));
+  try {
+    writeFileSync(join(ws, "mostudio.config.json"), "{}");
+    const sub = join(ws, "sub", "dir");
+    mkdirSync(sub, { recursive: true });
+    assert.equal(rootOf({ ...base, env: {}, cwd: sub }), ws);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
 });
 
-test("missing or invalid providers.json fails loudly", async () => {
+test("invalid providers.json in workspace fails loudly", async () => {
   const root = mkdtempSync(join(tmpdir(), "mostudio-root-"));
   try {
     const io = { ...mk(), root };
     const dir = await newProject("noproviders");
-    reset();
-    assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 1);
-    assert.match(err(), /providers\.json not found/);
     writeFileSync(join(root, "providers.json"), "{not json");
     reset();
     assert.equal(await main(["step", "fake", "--project", dir, "--param", "n=1"], io, steps), 1);
@@ -268,6 +276,36 @@ test("missing or invalid providers.json fails loudly", async () => {
     assert.match(err(), /providers\.json\[0\]\.capabilities/);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run finds workflows in the package when the workspace has none", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "mostudio-ws-wf-"));
+  try {
+    writeFileSync(join(ws, "mostudio.config.json"), JSON.stringify({}));
+    const dir = join(ws, "p");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "project.json"), JSON.stringify({ name: "p" }));
+    reset();
+    assert.equal(
+      await main(
+        ["run", "nope", "--project", dir],
+        {
+          stdout: (s: string) => void outBuf.push(s),
+          stderr: (s: string) => void errBuf.push(s),
+          cwd: ws,
+          root: ws,
+          env: env(),
+        },
+        steps,
+      ),
+      64,
+    );
+    assert.match(err(), /unknown workflow: nope/);
+    assert.match(err(), /rough-cut/);
+    assert.match(err(), /short/);
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
   }
 });
 

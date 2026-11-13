@@ -11,7 +11,7 @@ import { buildCues, toCutWords, withSegments } from "../src/group.ts";
 import { applyReplacements, parseReplacements } from "../src/replace.ts";
 import { buildSrt, formatSrtTimestamp } from "../src/srt.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const registry: ProviderRegistry = {
   async pick() {
     throw new Error("no providers in captions");

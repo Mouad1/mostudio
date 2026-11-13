@@ -8,7 +8,7 @@ import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
 import { runStep, writeJsonAtomic } from "../../../core/src/index.ts";
 import { cut } from "../src/cut.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const registry: ProviderRegistry = {
   async pick() {
     throw new Error("no providers in cut");

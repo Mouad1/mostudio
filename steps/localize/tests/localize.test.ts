@@ -12,7 +12,7 @@ const sleeps: number[] = [];
 const localize = createLocalize({ sleep: async (ms) => { sleeps.push(ms); } });
 import { arabicScriptPct, buildMessages, parseReply } from "../src/prompt.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const fakeProvider = (id: string): PickedProvider => ({
   id,
   capabilities: ["llm"],

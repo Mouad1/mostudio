@@ -8,7 +8,7 @@ import type { Config, ProviderRegistry } from "../../../core/src/index.ts";
 import { runStep } from "../../../core/src/index.ts";
 import { parseBlackStart, parseSilentStart, qa } from "../src/qa.ts";
 
-const config: Config = { billing: "free-only", projectsRoot: "/x", home: "/x" };
+const config: Config = { billing: "free-only", projectsRoot: "/x", inspirationRoot: "/x", home: "/x" };
 const registry: ProviderRegistry = {
   async pick() {
     throw new Error("no providers in qa");

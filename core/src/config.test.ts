@@ -50,6 +50,7 @@ test("loadConfig defaults when file missing", async () => {
   assert.deepEqual(c, {
     billing: "free-only",
     projectsRoot: join(tmp, "projects"),
+    inspirationRoot: join(tmp, "inspiration"),
     home: join(homedir(), ".mostudio"),
   });
 });
@@ -61,7 +62,41 @@ test("loadConfig reads file, resolves projectsRoot, honours MOSTUDIO_HOME", asyn
     JSON.stringify({ billing: "allow-paid", projectsRoot: "out" }),
   );
   const c = await loadConfig(root, { MOSTUDIO_HOME: "/x/home" });
-  assert.deepEqual(c, { billing: "allow-paid", projectsRoot: join(root, "out"), home: "/x/home" });
+  assert.deepEqual(c, {
+    billing: "allow-paid",
+    projectsRoot: join(root, "out"),
+    inspirationRoot: join(root, "inspiration"),
+    home: "/x/home",
+  });
+});
+
+test("inspirationRoot defaults to <root>/inspiration and resolves relative paths", async () => {
+  const root = await mkdtemp(join(tmp, "insp-"));
+  const def = await loadConfig(root, {});
+  assert.equal(def.inspirationRoot, join(root, "inspiration"));
+
+  await writeFile(
+    join(root, "mostudio.config.json"),
+    JSON.stringify({ inspirationRoot: "my-inspiration" }),
+  );
+  const rel = await loadConfig(root, {});
+  assert.equal(rel.inspirationRoot, join(root, "my-inspiration"));
+
+  await writeFile(
+    join(root, "mostudio.config.json"),
+    JSON.stringify({ inspirationRoot: "/custom/inspiration" }),
+  );
+  const abs = await loadConfig(root, {});
+  assert.equal(abs.inspirationRoot, "/custom/inspiration");
+});
+
+test("non-string inspirationRoot throws error", async () => {
+  const root = await mkdtemp(join(tmp, "insp-bad-"));
+  await writeFile(
+    join(root, "mostudio.config.json"),
+    JSON.stringify({ inspirationRoot: 123 }),
+  );
+  await assert.rejects(loadConfig(root, {}), /mostudio\.config\.json: inspirationRoot must be a string/);
 });
 
 test("loadConfig rejects invalid billing", async () => {
