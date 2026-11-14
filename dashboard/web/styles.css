@@ -197,6 +197,10 @@ code {
     display: none;
   }
 
+  .nav-footer {
+    display: none;
+  }
+
   .nav-tabs {
     flex-direction: row;
     justify-content: space-around;
