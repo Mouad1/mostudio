@@ -130,31 +130,32 @@ export async function getProjectStatus(
     }
   }
 
-  // Running: false (until Task 11 job manager)
-  const running = false;
+  const running = ctx.jobs.isRunning(id);
 
   // Interrupted: steps/*.running where pid is dead and no job is running
   const interrupted: string[] = [];
-  const stepsDir = join(dir, "steps");
-  try {
-    const entries = await readdir(stepsDir, { withFileTypes: true });
-    for (const ent of entries) {
-      if (ent.isFile() && ent.name.endsWith(".running")) {
-        const stepName = ent.name.slice(0, -".running".length);
-        const markerPath = join(stepsDir, ent.name);
-        try {
-          const marker = await readJson<{ pid?: unknown }>(markerPath);
-          const pid = typeof marker?.pid === "number" ? marker.pid : undefined;
-          if (pid !== undefined) {
-            if (!isPidAlive(pid)) {
-              interrupted.push(stepName);
+  if (!running) {
+    const stepsDir = join(dir, "steps");
+    try {
+      const entries = await readdir(stepsDir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.isFile() && ent.name.endsWith(".running")) {
+          const stepName = ent.name.slice(0, -".running".length);
+          const markerPath = join(stepsDir, ent.name);
+          try {
+            const marker = await readJson<{ pid?: unknown }>(markerPath);
+            const pid = typeof marker?.pid === "number" ? marker.pid : undefined;
+            if (pid !== undefined) {
+              if (!isPidAlive(pid)) {
+                interrupted.push(stepName);
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
-    }
-  } catch {}
-  interrupted.sort();
+    } catch {}
+    interrupted.sort();
+  }
 
   // Uploads: list files in uploads/
   const uploads: string[] = [];

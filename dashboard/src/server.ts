@@ -20,6 +20,8 @@ import {
   sendJson,
   sessionCookie,
 } from "./http.ts";
+import { JobManager } from "./jobs.ts";
+import { registerEventsRoutes } from "./routes/events.ts";
 import { registerFinderRoutes } from "./routes/finder.ts";
 import { registerInspirationRoutes } from "./routes/inspiration.ts";
 import { registerProjectsRoutes } from "./routes/projects.ts";
@@ -107,6 +109,7 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
   } catch {}
 
   const token = o.token ?? crypto.randomBytes(24).toString("hex");
+  const jobs = new JobManager();
 
   const ctx: DashboardContext = {
     home: o.home ?? process.env.MOSTUDIO_HOME ?? join(homedir(), ".mostudio"),
@@ -123,6 +126,7 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
       (async (p: string, reveal: boolean) => {
         await runBin("open", reveal ? ["-R", p] : [p]);
       }),
+    jobs,
   };
 
   const router = new Router();
@@ -170,6 +174,7 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
   registerInspirationRoutes(router, ctx);
   registerFinderRoutes(router, ctx);
   registerProjectsRoutes(router, ctx);
+  registerEventsRoutes(router, ctx);
 
   if (o.testRoutes) {
     o.testRoutes(router);
@@ -225,13 +230,15 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
     port: boundPort,
     token: ctx.token,
     ctx,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
+    close: async () => {
+      await jobs.abortAll();
+      return new Promise<void>((resolve, reject) => {
         server.closeAllConnections();
         server.close((err) => {
           if (err) reject(err);
           else resolve();
         });
-      }),
+      });
+    },
   };
 }

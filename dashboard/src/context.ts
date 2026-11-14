@@ -9,6 +9,7 @@ import {
   type StepModule,
 } from "../../core/src/index.ts";
 import { HttpError } from "./http.ts";
+import type { JobManager } from "./jobs.ts";
 
 export type DashboardContext = {
   home: string;
@@ -21,6 +22,7 @@ export type DashboardContext = {
   processEnv: Record<string, string>;
   fetch: typeof fetch;
   openPath: (p: string, reveal: boolean) => Promise<void>;
+  jobs: JobManager;
 };
 
 /** Returns ctx.root or throws HttpError 409 "setup needed". */
