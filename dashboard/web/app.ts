@@ -4,6 +4,7 @@ import type { SetupState } from "../src/types.ts";
 import { mount as mountInspiration } from "./views/inspiration.ts";
 import { mount as mountSetup } from "./views/setup.ts";
 import { mount as mountStudio } from "./views/studio.ts";
+import { mount as mountTools } from "./views/tools.ts";
 
 export type ViewMount = (root: HTMLElement, api: Api) => (() => void) | void;
 
@@ -18,6 +19,7 @@ export const routes: Record<string, ViewMount> = {
   "#setup": mountSetup,
   "#studio": mountStudio,
   "#inspiration": mountInspiration,
+  "#tools": mountTools,
 };
 
 export function registerRoute(hash: string, mount: ViewMount): void {
