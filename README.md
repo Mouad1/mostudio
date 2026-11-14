@@ -4,6 +4,35 @@ CLI and agent skill for video editing: ingest, transcribe, rough-cut and reel as
 
 Status: pre-alpha.
 
+## Getting Started
+
+### 1. Portable macOS App (Creators)
+
+No installation or technical setup required:
+
+1. Download the release zip for your Mac architecture:
+   - Apple Silicon (M1/M2/M3/M4): `dist/mostudio-0.1.0-mac-arm64.zip`
+   - Intel: `dist/mostudio-0.1.0-mac-x64.zip`
+2. Double-click the zip file to extract the `mostudio` folder.
+3. Open the folder and double-click **Start mostudio**.
+4. **First time only:** macOS Gatekeeper will ask for verification. Open **System Settings > Privacy & Security**, scroll to **Start mostudio**, click **Open Anyway**, and confirm. (See [How to open mostudio.txt](packaging/How%20to%20open%20mostudio.txt)).
+5. The local editing dashboard opens automatically in your browser at `http://127.0.0.1:4317`. All your personal video footage and API keys stay on your Mac.
+
+### 2. Developer & CLI Setup
+
+If you prefer using the terminal or running from source:
+
+```bash
+# 1. Initialize project folders and check system dependencies
+node cli/bin/mostudio.ts init
+
+# 2. Launch the local web dashboard
+node cli/bin/mostudio.ts ui --open
+
+# 3. Or run workflows directly via CLI
+node cli/bin/mostudio.ts run short --project projects/<slug> [--auto]
+```
+
 ## Requirements
 
 - Node >= 22.18 (runs TypeScript directly)

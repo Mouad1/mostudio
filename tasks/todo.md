@@ -76,3 +76,11 @@ Evidence driving it: S1 results (spikes/s1-stt/RESULTS.md) + first real rush (MS
 - [ ] captions v3 + chapters v4 read `localize/units.json` (titles and cues in the same language).
 - [ ] workflows: localize after cut in rough-cut and short.
 - [ ] Real check: first half of the 2026-11-12 rush in arabizi, fr, en; contact sheets + caption samples to user.
+
+## Plan 3 — Dashboard, Onboarding Wizard, and Portable macOS App (2026-11-13..14)
+
+- [x] Part A: Init wizard, .env.local parser, workspace resolution, run --auto, cancellation signal, system check (Tasks 1–6)
+- [x] Part B: Dashboard server core, static HTTP range, inspiration API, projects API, SSE events, run routes, tools catalog, settings API, setup wizard API, mostudio ui launcher (Tasks 7–16)
+- [x] Part C: Web shell, setup wizard view, pipeline state & stepper, 10 step output previews, Studio A & B, Inspiration view, Tools view, Settings view (Tasks 17–25)
+- [x] Part D: Portable macOS app packaging script (scripts/package-mac.ts), pinned runtime lock (packaging/runtime.lock.json), launcher script (packaging/Start mostudio.command), Gatekeeper first-open guide (packaging/How to open mostudio.txt), in-app version display, design audit and accessibility polish (Tasks 26–28)
+- Test suite: 672 tests passing, clean typecheck across root and web.
