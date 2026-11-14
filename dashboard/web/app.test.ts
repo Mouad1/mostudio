@@ -212,3 +212,45 @@ test("app initializes with #setup when needsSetup is true", async () => {
     cleanupDom();
   }
 });
+
+test("app initializes with #studio when needsSetup is false", async () => {
+  const cleanupDom = setupMockDom();
+  try {
+    assert.ok(routes["#studio"], "#studio route must be registered");
+
+    const container = new MockElement("div");
+
+    const mockApi: Partial<Api> = {
+      async get(path: string) {
+        if (path === "/api/setup") {
+          return {
+            needsSetup: false,
+            workspace: "/Users/test/Movies/mostudio",
+            suggestedWorkspace: "/Users/test/Movies/mostudio",
+            checks: [],
+            hasAiKey: true,
+            packaged: false,
+            version: "0.0.0",
+          } as SetupState as any;
+        }
+        if (path === "/api/projects") {
+          return { projects: [] };
+        }
+        throw new Error("unexpected path: " + path);
+      },
+    };
+
+    const app = await initApp(container as any, mockApi as any);
+    await new Promise((r) => setTimeout(r, 20));
+
+    assert.equal((globalThis as any).window.location.hash, "#studio");
+
+    const main = container.querySelector("#main-content");
+    assert.ok(main);
+    assert.ok(main.textContent.includes("Projects"));
+
+    app.destroy();
+  } finally {
+    cleanupDom();
+  }
+});
