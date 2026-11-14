@@ -20,6 +20,7 @@ import {
   sendJson,
   sessionCookie,
 } from "./http.ts";
+import { serveWeb } from "./static.ts";
 
 export type DashboardOptions = {
   home?: string;
@@ -123,8 +124,8 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
 
   const router = new Router();
 
-  // GET /?t=<token> -> 302 with cookie or 401 expired
-  router.add("GET", "/", (_req, res, _params, url) => {
+  // GET /?t=<token> -> 302 with cookie or 401 expired; without t -> serveWeb (index.html)
+  router.add("GET", "/", async (req, res, _params, url) => {
     if (url.searchParams.has("t")) {
       const queryToken = url.searchParams.get("t");
       if (safeTokenMatch(ctx.token, queryToken)) {
@@ -145,12 +146,12 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
           "<!DOCTYPE html><html><body><p>This link has expired. Close this tab and start mostudio again.</p></body></html>",
         );
       }
-    } else {
-      res.writeHead(200, {
-        "content-type": "text/plain; charset=utf-8",
-        "x-content-type-options": "nosniff",
-      });
-      res.end("mostudio");
+      return;
+    }
+    const handled = await serveWeb(req, res, url);
+    if (!handled) {
+      res.writeHead(404, { "x-content-type-options": "nosniff" });
+      res.end("Not Found");
     }
   });
 
@@ -177,7 +178,13 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
         checkAccess(req, ctx.port, ctx.token);
       }
 
-      const handled = await router.handle(req, res, parsedUrl);
+      let handled = await router.handle(req, res, parsedUrl);
+      if (!handled) {
+        const method = (req.method ?? "GET").toUpperCase();
+        if ((method === "GET" || method === "HEAD") && !parsedUrl.pathname.startsWith("/api/")) {
+          handled = await serveWeb(req, res, parsedUrl);
+        }
+      }
       if (!handled) {
         if (parsedUrl.pathname.startsWith("/api/")) {
           sendJson(res, 404, { error: "not found" });
