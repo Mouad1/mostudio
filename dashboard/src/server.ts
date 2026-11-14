@@ -9,6 +9,7 @@ import {
   createRedactor,
   loadEnvFile,
   PACKAGE_ROOT,
+  readAppSettings,
   runBin,
   type StepModule,
 } from "../../core/src/index.ts";
@@ -27,6 +28,7 @@ import { registerInspirationRoutes } from "./routes/inspiration.ts";
 import { registerProjectsRoutes } from "./routes/projects.ts";
 import { registerRunsRoutes } from "./routes/runs.ts";
 import { registerSettingsRoutes } from "./routes/settings.ts";
+import { registerSetupRoutes } from "./routes/setup.ts";
 import { registerToolsRoutes } from "./routes/tools.ts";
 import { serveWeb } from "./static.ts";
 
@@ -132,6 +134,13 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
     jobs,
   };
 
+  if (!ctx.root) {
+    const appSettings = await readAppSettings(ctx.home);
+    if (appSettings.workspace) {
+      ctx.root = appSettings.workspace;
+    }
+  }
+
   const router = new Router();
 
   // GET /?t=<token> -> 302 with cookie or 401 expired; without t -> serveWeb (index.html)
@@ -181,6 +190,7 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
   registerRunsRoutes(router, ctx);
   registerToolsRoutes(router, ctx);
   registerSettingsRoutes(router, ctx);
+  registerSetupRoutes(router, ctx);
 
   if (o.testRoutes) {
     o.testRoutes(router);
