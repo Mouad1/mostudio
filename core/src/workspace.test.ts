@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings, loadLayeredEnv } from "./workspace.ts";
+import { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings, loadLayeredEnv, listWorkflowFiles } from "./workspace.ts";
 import { homedir } from "node:os";
 
 let tmp: string;
@@ -83,4 +83,15 @@ test("layered env: app < workspace < process, with sources", () => {
   const { env, sources } = loadLayeredEnv({ home, root: ws, processEnv: { C: "proc" } });
   assert.deepEqual([env.A, env.B, env.C], ["app", "ws", "proc"]);
   assert.deepEqual([sources.A, sources.B, sources.C], ["app", "workspace", "process"]);
+});
+
+test("workflows merge per file, workspace wins by name", async () => {
+  const ws = join(tmp, "wf-ws");
+  mkdirSync(join(ws, "workflows"), { recursive: true });
+  writeFileSync(join(ws, "workflows", "short.json"), "{}");
+  writeFileSync(join(ws, "workflows", "mine.json"), "{}");
+  const files = await listWorkflowFiles(ws);
+  assert.equal(files.short, join(ws, "workflows", "short.json"));
+  assert.equal(files["rough-cut"], join(PACKAGE_ROOT, "workflows", "rough-cut.json"));
+  assert.ok(files.mine);
 });

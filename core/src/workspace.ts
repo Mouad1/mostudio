@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadEnvFile } from "./config.ts";
@@ -63,6 +63,32 @@ export function resolveShared(root: string, rel: string): string {
   const local = join(root, rel);
   if (existsSync(local)) return local;
   return join(PACKAGE_ROOT, rel);
+}
+
+/** Lists workflow files: package workflows, overridden/extended by workspace workflows. */
+export async function listWorkflowFiles(root: string | undefined): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  const pkgDir = join(PACKAGE_ROOT, "workflows");
+  try {
+    const entries = await readdir(pkgDir, { withFileTypes: true });
+    for (const ent of entries) {
+      if (ent.isFile() && ent.name.endsWith(".json")) {
+        result[ent.name.slice(0, -5)] = join(pkgDir, ent.name);
+      }
+    }
+  } catch {}
+  if (root) {
+    const wsDir = join(root, "workflows");
+    try {
+      const entries = await readdir(wsDir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.isFile() && ent.name.endsWith(".json")) {
+          result[ent.name.slice(0, -5)] = join(wsDir, ent.name);
+        }
+      }
+    } catch {}
+  }
+  return result;
 }
 
 /** Reads providers.json from the workspace or the package fallback. */

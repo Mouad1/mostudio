@@ -45,6 +45,21 @@ export type WorkflowInfo = {
 
 export const PROJECT_ID_RE: RegExp = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const UPLOAD_EXTS: string[] = [
+  ".mp4",
+  ".mov",
+  ".m4v",
+  ".mkv",
+  ".webm",
+  ".avi",
+  ".mp3",
+  ".wav",
+  ".m4a",
+  ".aac",
+  ".flac",
+];
+
+
 export type Knob = {
   label: string;
   help: string;

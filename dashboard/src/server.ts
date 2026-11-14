@@ -22,6 +22,7 @@ import {
 } from "./http.ts";
 import { registerFinderRoutes } from "./routes/finder.ts";
 import { registerInspirationRoutes } from "./routes/inspiration.ts";
+import { registerProjectsRoutes } from "./routes/projects.ts";
 import { serveWeb } from "./static.ts";
 
 export type DashboardOptions = {
@@ -168,6 +169,7 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
 
   registerInspirationRoutes(router, ctx);
   registerFinderRoutes(router, ctx);
+  registerProjectsRoutes(router, ctx);
 
   if (o.testRoutes) {
     o.testRoutes(router);

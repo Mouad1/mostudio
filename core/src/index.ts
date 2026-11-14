@@ -43,7 +43,7 @@ export { loudnormPass, measureLoudness, parseLoudnorm } from "./audio/loudness.t
 export type { Loudness, LoudnormStats } from "./audio/loudness.ts";
 export { approveStep, parseWorkflow, pendingApprovals, readProjectWorkflow, runWorkflow, stepParams, WorkflowMismatchError, WorkflowParamError } from "./workflow.ts";
 export type { RunWorkflowOptions, Workflow, WorkflowResult } from "./workflow.ts";
-export { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings, loadLayeredEnv } from "./workspace.ts";
+export { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings, loadLayeredEnv, listWorkflowFiles } from "./workspace.ts";
 export type { AppSettings } from "./workspace.ts";
 export { scaffoldWorkspace } from "./scaffold.ts";
 export type { ScaffoldEntry } from "./scaffold.ts";
