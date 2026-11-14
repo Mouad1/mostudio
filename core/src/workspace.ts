@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { loadEnvFile } from "./config.ts";
 import { readJson, writeJsonAtomic } from "./fs/atomic.ts";
 import { parseProviders } from "./providers/parse.ts";
 import type { ProviderEntry } from "./providers/registry.ts";
@@ -75,4 +76,38 @@ export async function loadProvidersFile(root: string): Promise<ProviderEntry[]> 
   }
   if (json === undefined) throw new Error(`providers.json not found at ${path} (set MOSTUDIO_ROOT to the mostudio repo)`);
   return parseProviders(json);
+}
+
+/** Loads layered environment: app ~/.mostudio/.env < workspace .env.local < process env. */
+export function loadLayeredEnv(o: {
+  home: string;
+  root?: string;
+  processEnv: Record<string, string>;
+}): {
+  env: Record<string, string>;
+  sources: Record<string, "app" | "workspace" | "process">;
+} {
+  const env: Record<string, string> = {};
+  const sources: Record<string, "app" | "workspace" | "process"> = {};
+
+  const appEnv = loadEnvFile(join(o.home, ".env"));
+  for (const [k, v] of Object.entries(appEnv)) {
+    env[k] = v;
+    sources[k] = "app";
+  }
+
+  if (o.root) {
+    const wsEnv = loadEnvFile(join(o.root, ".env.local"));
+    for (const [k, v] of Object.entries(wsEnv)) {
+      env[k] = v;
+      sources[k] = "workspace";
+    }
+  }
+
+  for (const [k, v] of Object.entries(o.processEnv)) {
+    env[k] = v;
+    sources[k] = "process";
+  }
+
+  return { env, sources };
 }

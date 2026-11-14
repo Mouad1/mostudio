@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings } from "./workspace.ts";
+import { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings, loadLayeredEnv } from "./workspace.ts";
 import { homedir } from "node:os";
 
 let tmp: string;
@@ -72,4 +72,15 @@ test("writeAppSettings merges patches and persists atomically", async () => {
   const s2 = await writeAppSettings(home, { animatedCaptions: true });
   assert.deepEqual(s2, { workspace: "/path/to/ws", animatedCaptions: true });
   assert.deepEqual(await readAppSettings(home), { workspace: "/path/to/ws", animatedCaptions: true });
+});
+
+test("layered env: app < workspace < process, with sources", () => {
+  const home = join(tmp, "env-home"), ws = join(tmp, "env-ws");
+  mkdirSync(home, { recursive: true });
+  mkdirSync(ws, { recursive: true });
+  writeFileSync(join(home, ".env"), "A=app\nB=app\nC=app\n");
+  writeFileSync(join(ws, ".env.local"), "B=ws\nC=ws\n");
+  const { env, sources } = loadLayeredEnv({ home, root: ws, processEnv: { C: "proc" } });
+  assert.deepEqual([env.A, env.B, env.C], ["app", "ws", "proc"]);
+  assert.deepEqual([sources.A, sources.B, sources.C], ["app", "workspace", "process"]);
 });
