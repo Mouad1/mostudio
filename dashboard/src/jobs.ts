@@ -33,6 +33,37 @@ export class JobManager {
     return this.subscribers.get(id)?.size ?? 0;
   }
 
+  emit(id: string, body: RunEventBody): RunEvent {
+    const curId = this.nextIds.get(id) ?? 1;
+    this.nextIds.set(id, curId + 1);
+
+    const event: RunEvent = {
+      ...body,
+      id: curId,
+      at: new Date().toISOString(),
+    };
+
+    let list = this.projectEvents.get(id);
+    if (!list) {
+      list = [];
+      this.projectEvents.set(id, list);
+    }
+    list.push(event);
+    if (list.length > this.keepEvents) {
+      list.shift();
+    }
+
+    const subs = this.subscribers.get(id);
+    if (subs) {
+      for (const fn of [...subs]) {
+        try {
+          fn(event);
+        } catch {}
+      }
+    }
+    return event;
+  }
+
   start(id: string, work: (emit: Emit, signal: AbortSignal) => Promise<void>): void {
     if (this.isRunning(id)) {
       throw new HttpError(409, "This project is already running.");
@@ -41,33 +72,7 @@ export class JobManager {
     this.running.set(id, { controller });
 
     const emit: Emit = (body: RunEventBody) => {
-      const curId = this.nextIds.get(id) ?? 1;
-      this.nextIds.set(id, curId + 1);
-
-      const event: RunEvent = {
-        ...body,
-        id: curId,
-        at: new Date().toISOString(),
-      };
-
-      let list = this.projectEvents.get(id);
-      if (!list) {
-        list = [];
-        this.projectEvents.set(id, list);
-      }
-      list.push(event);
-      if (list.length > this.keepEvents) {
-        list.shift();
-      }
-
-      const subs = this.subscribers.get(id);
-      if (subs) {
-        for (const fn of [...subs]) {
-          try {
-            fn(event);
-          } catch {}
-        }
-      }
+      this.emit(id, body);
     };
 
     (async () => {

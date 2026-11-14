@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HttpError } from "./http.ts";
 import { JobManager } from "./jobs.ts";
+import type { RunEvent } from "./types.ts";
 
 test("one job per project; ids increase", async () => {
   const jm = new JobManager();
@@ -114,4 +115,17 @@ test("abortAll cancels all running jobs and waits for idle", async () => {
   assert.equal(jm.isRunning("p2"), false);
   assert.equal((jm.events("p1").at(-1) as { status?: string }).status, "cancelled");
   assert.equal((jm.events("p2").at(-1) as { status?: string }).status, "cancelled");
+});
+
+test("emit records and notifies when no job is running", () => {
+  const jm = new JobManager();
+  const received: RunEvent[] = [];
+  jm.subscribe("p", (e) => received.push(e));
+
+  const ev = jm.emit("p", { type: "approved", step: "b", auto: false });
+  assert.equal(ev.id, 1);
+  assert.equal(ev.type, "approved");
+  assert.equal(jm.events("p").length, 1);
+  assert.equal(received.length, 1);
+  assert.equal(received[0].id, 1);
 });
