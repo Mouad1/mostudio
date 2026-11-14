@@ -2,6 +2,7 @@ import { PROJECT_ID_RE, type ProjectStatus, type ProjectSummary } from "../../sr
 import type { Api } from "../lib/api.ts";
 import { h } from "../lib/dom.ts";
 import { errorBox } from "./error-box.ts";
+import { mountStudioRun } from "./studio-run.ts";
 import { renderStudioUpload } from "./studio-upload.ts";
 
 function badgeConfig(status: ProjectSummary["lastStatus"]): { className: string; text: string } {
@@ -57,6 +58,7 @@ export function mount(root: HTMLElement, api: Api): () => void {
   let currentStatus: ProjectStatus | null = null;
   let errorMessage: string | null = null;
   let isLoading = false;
+  let currentRunCleanup: (() => void) | null = null;
 
   async function loadProjects() {
     try {
@@ -95,6 +97,10 @@ export function mount(root: HTMLElement, api: Api): () => void {
   }
 
   async function selectProject(id: string, updateState = true) {
+    if (currentRunCleanup) {
+      currentRunCleanup();
+      currentRunCleanup = null;
+    }
     selectedProjectId = id;
     try {
       const status = await api.get<ProjectStatus>(`/api/projects/${id}`);
@@ -124,6 +130,10 @@ export function mount(root: HTMLElement, api: Api): () => void {
           type: "button",
           class: "btn btn-primary btn-new-video",
           onClick: () => {
+            if (currentRunCleanup) {
+              currentRunCleanup();
+              currentRunCleanup = null;
+            }
             selectedProjectId = null;
             currentStatus = null;
             render();
@@ -183,6 +193,11 @@ export function mount(root: HTMLElement, api: Api): () => void {
   }
 
   function renderWorkspace(): HTMLElement {
+    if (currentRunCleanup) {
+      currentRunCleanup();
+      currentRunCleanup = null;
+    }
+
     const workspace = h("section", { class: "studio-workspace" });
 
     if (errorMessage) {
@@ -306,6 +321,25 @@ export function mount(root: HTMLElement, api: Api): () => void {
       sections.push(uploadsCard);
     }
 
+    // Mount studio-run for this project
+    const runContainer = h("div", { class: "studio-run-container" });
+    currentRunCleanup = mountStudioRun(runContainer, {
+      api,
+      projectId: currentStatus.id,
+      initialStatus: currentStatus,
+      onStatusChange: (updated) => {
+        currentStatus = updated;
+        const p = projects.find((x) => x.id === updated.id);
+        if (p) {
+          if (updated.running) p.lastStatus = "running";
+          else if (updated.pending?.length > 0) p.lastStatus = "awaiting-approval";
+          else if (updated.steps?.assemble?.status === "pass") p.lastStatus = "done";
+          else if (Object.values(updated.steps || {}).some((s) => s.status === "fail")) p.lastStatus = "failed";
+        }
+      },
+    });
+    sections.push(runContainer);
+
     workspace.replaceChildren(...sections);
     return workspace;
   }
@@ -325,6 +359,10 @@ export function mount(root: HTMLElement, api: Api): () => void {
 
   return () => {
     mounted = false;
+    if (currentRunCleanup) {
+      currentRunCleanup();
+      currentRunCleanup = null;
+    }
     root.replaceChildren();
   };
 }

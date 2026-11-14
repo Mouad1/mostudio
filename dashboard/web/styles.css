@@ -1163,3 +1163,355 @@ code {
     padding-bottom: 16px;
   }
 }
+
+/* Studio Run View */
+.studio-run-section,
+.studio-run-container,
+.studio-run-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.studio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.studio-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Workflow Cards */
+.workflow-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.workflow-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.workflow-card:hover:not(.locked) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.workflow-card.selected {
+  border-color: var(--accent);
+  background-color: var(--bg-surface-elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.workflow-card.locked {
+  cursor: default;
+  opacity: 0.9;
+}
+
+.workflow-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.workflow-locked-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.workflow-card-steps {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Quick Settings */
+.params-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.param-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.param-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.param-select {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.param-select:focus {
+  border-color: var(--accent);
+}
+
+.param-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Mode Cards */
+.mode-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.mode-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.mode-card:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.mode-card.selected {
+  border-color: var(--accent);
+  background-color: var(--bg-surface-elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.mode-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-card-help {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Run Action Buttons */
+.studio-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.btn-run-primary {
+  font-size: 15px;
+  padding: 10px 24px;
+  font-weight: 600;
+}
+
+.btn-run-stop {
+  font-size: 15px;
+  padding: 10px 24px;
+  font-weight: 600;
+  background-color: var(--danger);
+  color: #fff;
+  border: 1px solid var(--danger-border);
+}
+
+.btn-run-stop:hover {
+  background-color: #d73a49;
+}
+
+.btn-run-approve {
+  font-size: 15px;
+  padding: 10px 24px;
+  font-weight: 600;
+}
+
+.btn-run-start-over {
+  font-size: 15px;
+  padding: 10px 24px;
+  font-weight: 600;
+}
+
+/* Step Detail Panel */
+.step-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.step-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.step-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.step-previews-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Captions Review Editor */
+.captions-review-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.editor-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.editor-help {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.replacements-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.replacements-textarea:focus {
+  border-color: var(--accent);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Log Viewer */
+.step-logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logs-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.step-logs-viewer {
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-log-line {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.step-logs-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Done Section */
+.studio-done-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: rgba(63, 185, 80, 0.08);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  border-radius: 8px;
+}
+
+.final-video-wrapper {
+  max-width: 640px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #000;
+}
+
+.final-video-player {
+  width: 100%;
+  display: block;
+}
+
+.final-video-toolbar {
+  display: flex;
+  gap: 10px;
+}

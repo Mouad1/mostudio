@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ProjectStatus, ProjectSummary } from "../../src/types.ts";
+import type { ProjectStatus, ProjectSummary, WorkflowInfo } from "../../src/types.ts";
 import type { Api } from "../lib/api.ts";
 import { mount } from "./studio.ts";
 
@@ -46,9 +46,6 @@ class MockTextNode extends MockNode {
   }
   override get textContent(): string {
     return this.text;
-  }
-  override set textContent(v: string) {
-    this.text = v;
   }
 }
 
@@ -171,6 +168,19 @@ function setupMockDom() {
   };
 }
 
+const mockWorkflows: WorkflowInfo[] = [
+  {
+    name: "short",
+    title: "Short clip",
+    steps: [
+      { step: "ingest", approve: false },
+      { step: "cut", approve: false },
+      { step: "captions", approve: true },
+      { step: "assemble", approve: false },
+    ],
+  },
+];
+
 function createMockApi(handlers: {
   get?: (url: string) => Promise<any>;
   send?: (method: string, url: string, body?: any) => Promise<any>;
@@ -188,6 +198,7 @@ function createMockApi(handlers: {
 
 test("studio mounts and lists projects with date, name, badge", async () => {
   const cleanupDom = setupMockDom();
+  let cleanup: (() => void) | undefined;
   try {
     const mockProjects: ProjectSummary[] = [
       { id: "2026-11-14-demo-clip", lastStatus: "done", workflow: "short" },
@@ -213,12 +224,18 @@ test("studio mounts and lists projects with date, name, badge", async () => {
         if (path === "/api/projects/2026-11-14-demo-clip") {
           return mockStatusDone;
         }
+        if (path === "/api/workflows") {
+          return { workflows: mockWorkflows };
+        }
+        if (path.includes("/replacements")) {
+          return { text: "" };
+        }
         throw new Error("unexpected path: " + path);
       },
     });
 
     const root = new MockElement("div");
-    const cleanup = mount(root as any, mockApi);
+    cleanup = mount(root as any, mockApi);
     await new Promise((r) => setTimeout(r, 20));
 
     // Check project list rendered
@@ -231,14 +248,18 @@ test("studio mounts and lists projects with date, name, badge", async () => {
     assert.ok(root.textContent.includes("uploads/raw.mp4"));
     assert.ok(root.textContent.includes("media/ingest.mp4"));
 
-    cleanup();
+    // studio-run view is mounted into workspace
+    assert.ok(root.textContent.includes("What are you making?"));
+    assert.ok(root.textContent.includes("Review mode"));
   } finally {
+    cleanup?.();
     cleanupDom();
   }
 });
 
 test("studio renders dropzone when project has no media and no uploads", async () => {
   const cleanupDom = setupMockDom();
+  let cleanup: (() => void) | undefined;
   try {
     const mockProjects: ProjectSummary[] = [
       { id: "2026-11-14-empty-project", lastStatus: "new" },
@@ -261,25 +282,28 @@ test("studio renders dropzone when project has no media and no uploads", async (
         if (path === "/api/projects/2026-11-14-empty-project") {
           return mockStatusEmpty;
         }
+        if (path === "/api/workflows") {
+          return { workflows: mockWorkflows };
+        }
         throw new Error("unexpected path: " + path);
       },
     });
 
     const root = new MockElement("div");
-    const cleanup = mount(root as any, mockApi);
+    cleanup = mount(root as any, mockApi);
     await new Promise((r) => setTimeout(r, 20));
 
     assert.ok(root.textContent.includes("Drop your video here"));
     assert.ok(root.textContent.includes("or choose a file"));
-
-    cleanup();
   } finally {
+    cleanup?.();
     cleanupDom();
   }
 });
 
 test("clicking New video switches to new project dropzone", async () => {
   const cleanupDom = setupMockDom();
+  let cleanup: (() => void) | undefined;
   try {
     const mockProjects: ProjectSummary[] = [
       { id: "2026-11-14-existing", lastStatus: "done" },
@@ -298,12 +322,14 @@ test("clicking New video switches to new project dropzone", async () => {
       async get(path: string) {
         if (path === "/api/projects") return { projects: mockProjects };
         if (path === "/api/projects/2026-11-14-existing") return mockStatus;
+        if (path === "/api/workflows") return { workflows: mockWorkflows };
+        if (path.includes("/replacements")) return { text: "" };
         throw new Error("unexpected path: " + path);
       },
     });
 
     const root = new MockElement("div");
-    const cleanup = mount(root as any, mockApi);
+    cleanup = mount(root as any, mockApi);
     await new Promise((r) => setTimeout(r, 20));
 
     // Shows existing media/uploads initially
@@ -318,9 +344,8 @@ test("clicking New video switches to new project dropzone", async () => {
 
     // Now dropzone is visible
     assert.ok(root.textContent.includes("Drop your video here"));
-
-    cleanup();
   } finally {
+    cleanup?.();
     cleanupDom();
   }
 });
