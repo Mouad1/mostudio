@@ -10,9 +10,9 @@ When a project is created and runs workflows, its directory is structured as fol
 
 ```
 projects/<project-slug>/
-├── ingest/
-│   └── source.mp4           # Ingested video/audio file
-├── transcribe/
+├── media/
+│   └── <file>               # Video/audio file
+├── transcript/
 │   ├── transcript.json      # Word-level timestamps, confidence scores, and language detection
 │   └── words.json           # Filtered word list
 ├── captions/
@@ -30,7 +30,7 @@ projects/<project-slug>/
 To create and run a project:
 ```bash
 # 1. Initialize a new project directory
-mostudio new --project projects/my-sample-video
+mostudio new my-sample-video
 
 # 2. Run the short-form workflow (9:16 vertical shorts/reels preset)
 mostudio run short --project projects/my-sample-video

@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { findWorkspace, loadProvidersFile, PACKAGE_ROOT, resolveShared } from "./workspace.ts";
+import { defaultWorkspace, findWorkspace, loadProvidersFile, PACKAGE_ROOT, readAppSettings, resolveShared, writeAppSettings } from "./workspace.ts";
+import { homedir } from "node:os";
 
 let tmp: string;
 
@@ -46,4 +47,29 @@ test("loadProvidersFile reads the package providers.json for an empty workspace"
   assert.ok(Array.isArray(providers));
   assert.ok(providers.length > 0);
   assert.ok(providers.some((p) => p.id === "groq" || p.id === "cloudflare" || p.id === "openai"));
+});
+
+test("defaultWorkspace returns Movies/mostudio in homedir", () => {
+  assert.equal(defaultWorkspace(), join(homedir(), "Movies", "mostudio"));
+});
+
+test("readAppSettings returns {} when missing or invalid", async () => {
+  const home = join(tmp, "missing-home");
+  assert.deepEqual(await readAppSettings(home), {});
+
+  const badHome = join(tmp, "bad-home");
+  mkdirSync(badHome, { recursive: true });
+  writeFileSync(join(badHome, "settings.json"), "not json");
+  assert.deepEqual(await readAppSettings(badHome), {});
+});
+
+test("writeAppSettings merges patches and persists atomically", async () => {
+  const home = join(tmp, "app-home");
+  const s1 = await writeAppSettings(home, { workspace: "/path/to/ws" });
+  assert.deepEqual(s1, { workspace: "/path/to/ws" });
+  assert.deepEqual(await readAppSettings(home), { workspace: "/path/to/ws" });
+
+  const s2 = await writeAppSettings(home, { animatedCaptions: true });
+  assert.deepEqual(s2, { workspace: "/path/to/ws", animatedCaptions: true });
+  assert.deepEqual(await readAppSettings(home), { workspace: "/path/to/ws", animatedCaptions: true });
 });

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { StepModule } from "../../core/src/index.ts";
+import { readAppSettings } from "../../core/src/index.ts";
 import { main, rootOf } from "./main.ts";
 
 const fakeContract = { inputs: [], outputs: [], gate: [] };
@@ -540,4 +541,57 @@ test("run --auto passes the approve step and logs it", async () => {
   assert.match(out(), /^wf-auto: done$/m);
   const approvals = JSON.parse(readFileSync(join(dir, "steps", "approvals.json"), "utf8"));
   assert.ok(approvals.captions);
+});
+
+test("init --dir scaffolds, remembers the workspace, prints next step", async () => {
+  const ws = join(cwd, "my-ws");
+  reset();
+  const mockSystem = {
+    nodeVersion: "v22.18.0",
+    packaged: false,
+    run: async (_b: string, args: string[]) => args.includes("-filters") ? " ass " : "fake 1.0",
+    listDir: () => ["ggml-base.bin"],
+  };
+  const exitCode = await main(["init", "--dir", ws], { ...mk(), system: mockSystem }, steps);
+  assert.equal(exitCode, 0);
+  const settings = await readAppSettings(home);
+  assert.equal(settings.workspace, ws);
+  assert.match(out(), /Next: mostudio ui/);
+  assert.match(out(), /\+ mostudio\.config\.json\s+settings for this workspace/);
+  assert.match(out(), /✓ App runtime/);
+
+  // Re-running reports (kept)
+  reset();
+  const exitCode2 = await main(["init", "--dir", ws], { ...mk(), system: mockSystem }, steps);
+  assert.equal(exitCode2, 0);
+  assert.match(out(), /= mostudio\.config\.json \(kept\)/);
+});
+
+test("init formats failing system checks with fix instructions", async () => {
+  const ws = join(cwd, "failing-ws");
+  reset();
+  const mockSystem = {
+    nodeVersion: "v20.0.0",
+    packaged: false,
+    run: async () => { throw new Error("not found"); },
+    listDir: () => [],
+  };
+  const exitCode = await main(["init", "--dir", ws], { ...mk(), system: mockSystem }, steps);
+  assert.equal(exitCode, 0);
+  assert.match(out(), /✗ App runtime: v20\.0\.0/);
+  assert.match(out(), /fix: install Node 22\.18 or newer/);
+});
+
+test("init with relative --dir resolves against cwd", async () => {
+  reset();
+  const mockSystem = {
+    nodeVersion: "v22.18.0",
+    packaged: false,
+    run: async (_b: string, args: string[]) => args.includes("-filters") ? " ass " : "fake 1.0",
+    listDir: () => [],
+  };
+  const exitCode = await main(["init", "--dir", "relative-ws"], { ...mk(), system: mockSystem }, steps);
+  assert.equal(exitCode, 0);
+  const settings = await readAppSettings(home);
+  assert.equal(settings.workspace, join(cwd, "relative-ws"));
 });

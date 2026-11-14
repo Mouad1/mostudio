@@ -1,7 +1,10 @@
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   approveStep,
+  checkSystem,
+  defaultWorkspace,
   createProject,
   createRedactor,
   createRegistry,
@@ -17,12 +20,14 @@ import {
   readLedger,
   readProjectWorkflow,
   resolveShared,
+  scaffoldWorkspace,
   runStep,
   runWorkflow,
   WorkflowMismatchError,
   WorkflowParamError,
+  writeAppSettings,
 } from "../../core/src/index.ts";
-import type { ProviderEntry, StepModule, StepResult } from "../../core/src/index.ts";
+import type { ProviderEntry, StepModule, StepResult, SystemDeps } from "../../core/src/index.ts";
 import { defaultSteps } from "../../steps/index.ts";
 
 export type Io = {
@@ -33,6 +38,7 @@ export type Io = {
   env: Record<string, string>;
   /** Repo root holding providers.json, mostudio.config.json and .env.local (tests override it). */
   root?: string;
+  system?: Partial<SystemDeps>;
 };
 
 /** Repo root: io.root, else MOSTUDIO_ROOT, else nearest ancestor workspace, else package root. */
@@ -43,6 +49,7 @@ export function rootOf(io: Io): string {
 }
 
 const USAGE = `usage:
+  mostudio init [--dir <path>]
   mostudio new <slug> [--brief <file>]
   mostudio step <name> --project <dir> [--param k=v]... [--force] [--json]
   mostudio status --project <dir> [--json]
@@ -54,6 +61,7 @@ class UsageError extends Error {}
 
 type Parsed = {
   positional: string[];
+  dir?: string;
   project?: string;
   brief?: string;
   params: Record<string, string>;
@@ -78,7 +86,8 @@ function parseArgs(args: string[]): Parsed {
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i] as string;
-    if (a === "--project") p.project = value(++i, a);
+    if (a === "--dir") p.dir = value(++i, a);
+    else if (a === "--project") p.project = value(++i, a);
     else if (a === "--brief") p.brief = value(++i, a);
     else if (a === "--param") {
       const kv = value(++i, a);
@@ -299,6 +308,34 @@ async function cmdStatus(p: Parsed, io: Io, steps: Record<string, StepModule>): 
   return 0;
 }
 
+async function cmdInit(p: Parsed, io: Io, env: Record<string, string>): Promise<number> {
+  if (p.positional.length > 1) throw new UsageError("init takes no positional arguments");
+  const dir = p.dir ? resolve(io.cwd, p.dir) : defaultWorkspace();
+  const entries = await scaffoldWorkspace(dir);
+  for (const entry of entries) {
+    if (entry.status === "created") {
+      io.stdout(`  + ${entry.path.padEnd(24)} ${entry.purpose}\n`);
+    } else {
+      io.stdout(`  = ${entry.path} (kept)\n`);
+    }
+  }
+  const checks = await checkSystem(env, io.system);
+  for (const check of checks) {
+    if (check.ok) {
+      io.stdout(`  ✓ ${check.label}\n`);
+    } else {
+      io.stdout(`  ✗ ${check.label}: ${check.detail}\n`);
+      if (check.fix) {
+        io.stdout(`      fix: ${check.fix}\n`);
+      }
+    }
+  }
+  const home = io.env.MOSTUDIO_HOME ?? join(homedir(), ".mostudio");
+  await writeAppSettings(home, { workspace: dir });
+  io.stdout("\nNext: mostudio ui\n");
+  return 0;
+}
+
 export async function main(
   argv: string[],
   io: Io,
@@ -312,12 +349,13 @@ export async function main(
       return 0;
     }
     const command = p.positional[0];
-    if (command !== "new" && command !== "step" && command !== "status" && command !== "run" && command !== "approve") {
+    if (command !== "init" && command !== "new" && command !== "step" && command !== "status" && command !== "run" && command !== "approve") {
       io.stderr(command ? `unknown command: ${command}\n${USAGE}` : USAGE);
       return 64;
     }
     fileEnv = loadEnvFile(join(rootOf(io), ".env.local"));
     const env = { ...fileEnv, ...io.env };
+    if (command === "init") return await cmdInit(p, io, env);
     if (command === "new") return await cmdNew(p, io, env);
     if (command === "step") return await cmdStep(p, io, env, steps);
     if (command === "run") return await cmdRun(p, io, env, steps);

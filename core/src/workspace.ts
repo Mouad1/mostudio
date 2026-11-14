@@ -1,8 +1,43 @@
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { readJson } from "./fs/atomic.ts";
+import { readJson, writeJsonAtomic } from "./fs/atomic.ts";
 import { parseProviders } from "./providers/parse.ts";
 import type { ProviderEntry } from "./providers/registry.ts";
+
+export type AppSettings = {
+  workspace?: string;
+  animatedCaptions?: boolean;
+};
+
+/** Default workspace location: ~/Movies/mostudio. */
+export function defaultWorkspace(): string {
+  return join(homedir(), "Movies", "mostudio");
+}
+
+/** Reads settings.json from home directory; returns {} if missing or invalid. */
+export async function readAppSettings(home: string): Promise<AppSettings> {
+  try {
+    const data = await readJson<AppSettings>(join(home, "settings.json"));
+    if (data && typeof data === "object" && !Array.isArray(data)) return data;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+/** Merges patch into existing settings and saves atomically to settings.json. */
+export async function writeAppSettings(
+  home: string,
+  patch: Partial<AppSettings>,
+): Promise<AppSettings> {
+  const existing = await readAppSettings(home);
+  const merged: AppSettings = { ...existing, ...patch };
+  await mkdir(home, { recursive: true });
+  await writeJsonAtomic(join(home, "settings.json"), merged);
+  return merged;
+}
 
 /** Package directory of mostudio. */
 export const PACKAGE_ROOT: string = resolve(import.meta.dirname, "..", "..");
