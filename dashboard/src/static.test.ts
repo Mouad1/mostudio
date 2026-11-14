@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -128,4 +128,31 @@ test("typed web modules are served as JavaScript without types, with security he
   assert.equal((await fetch(d.base + "/../package.json")).status, 404);
   assert.equal((await fetch(d.base + "/test.test.ts")).status, 404);
   await d.close();
+});
+
+test("every non-test web module in dashboard/web serves 200 without type annotations", async () => {
+  const d = await startTestDashboard();
+  try {
+    const files: string[] = [];
+    function scan(dir: string, rel: string) {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        if (ent.isDirectory()) {
+          scan(join(dir, ent.name), rel ? `${rel}/${ent.name}` : ent.name);
+        } else if (ent.isFile() && ent.name.endsWith(".ts") && !ent.name.includes(".test.")) {
+          files.push(rel ? `${rel}/${ent.name}` : ent.name);
+        }
+      }
+    }
+    scan(WEB_ROOT, "");
+    assert.ok(files.length > 0, "expected to find web modules in WEB_ROOT");
+    for (const file of files) {
+      const res = await fetch(`${d.base}/${file}`);
+      assert.equal(res.status, 200, `fetching ${file} failed with status ${res.status}`);
+      assert.equal(res.headers.get("content-type"), "text/javascript");
+      const text = await res.text();
+      assert.ok(text.length > 0, `${file} should not be empty`);
+    }
+  } finally {
+    await d.close();
+  }
 });
