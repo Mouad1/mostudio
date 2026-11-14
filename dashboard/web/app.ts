@@ -1,6 +1,7 @@
 import { createApi, type Api } from "./lib/api.ts";
 import { h } from "./lib/dom.ts";
 import type { SetupState } from "../src/types.ts";
+import { mount as mountSetup } from "./views/setup.ts";
 
 export type ViewMount = (root: HTMLElement, api: Api) => (() => void) | void;
 
@@ -11,7 +12,9 @@ export const TABS = [
   { id: "settings", hash: "#settings", label: "Settings" },
 ] as const;
 
-export const routes: Record<string, ViewMount> = {};
+export const routes: Record<string, ViewMount> = {
+  "#setup": mountSetup,
+};
 
 export function registerRoute(hash: string, mount: ViewMount): void {
   routes[hash] = mount;
@@ -74,10 +77,16 @@ export async function initApp(
 
   async function navigate(hash: string): Promise<void> {
     if (needsSetup && hash !== "#setup") {
-      if (window.location.hash !== "#setup") {
-        window.location.hash = "#setup";
+      try {
+        const setup = await api.get<SetupState>("/api/setup");
+        needsSetup = Boolean(setup.needsSetup);
+      } catch {}
+      if (needsSetup) {
+        if (window.location.hash !== "#setup") {
+          window.location.hash = "#setup";
+        }
+        hash = "#setup";
       }
-      hash = "#setup";
     }
 
     const validHashes = [
