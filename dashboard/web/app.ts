@@ -1,6 +1,7 @@
 import { createApi, type Api } from "./lib/api.ts";
 import { h } from "./lib/dom.ts";
 import type { SetupState } from "../src/types.ts";
+import { mount as mountInspiration } from "./views/inspiration.ts";
 import { mount as mountSetup } from "./views/setup.ts";
 import { mount as mountStudio } from "./views/studio.ts";
 
@@ -16,6 +17,7 @@ export const TABS = [
 export const routes: Record<string, ViewMount> = {
   "#setup": mountSetup,
   "#studio": mountStudio,
+  "#inspiration": mountInspiration,
 };
 
 export function registerRoute(hash: string, mount: ViewMount): void {

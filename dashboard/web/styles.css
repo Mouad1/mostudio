@@ -1515,3 +1515,362 @@ code {
   display: flex;
   gap: 10px;
 }
+
+/* ==========================================================================
+   Inspiration View
+   ========================================================================== */
+
+.inspiration-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.inspiration-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspiration-intro {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Toast notifications */
+.inspiration-toast-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 16px;
+  z-index: 100;
+}
+
+.inspiration-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: toastFadeIn 0.2s ease-out;
+}
+
+@keyframes toastFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.inspiration-toast-msg {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.btn-toast-move {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn-toast-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.btn-toast-dismiss:hover {
+  color: var(--text-primary);
+}
+
+/* Paste box */
+.inspiration-paste-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspiration-paste-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.inspiration-paste-input {
+  width: 100%;
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 64px;
+}
+
+.inspiration-paste-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.inspiration-paste-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.inspiration-paste-error {
+  margin-top: 4px;
+}
+
+/* Shelves layout: two shelves, stacked under 900px */
+.inspiration-shelves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .inspiration-shelves {
+    grid-template-columns: 1fr;
+  }
+}
+
+.inspiration-shelf {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.shelf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.shelf-header-text {
+  flex: 1;
+  min-width: 180px;
+}
+
+.shelf-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.shelf-accepts {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.btn-show-finder {
+  font-size: 12px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+/* Shelf dropzone */
+.inspiration-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 16px 12px;
+  background-color: var(--bg-base);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  min-height: 52px;
+}
+
+.inspiration-dropzone:hover,
+.inspiration-dropzone.drag-over {
+  border-color: var(--accent);
+  background-color: var(--bg-surface-elevated);
+}
+
+.dropzone-idle-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dropzone-icon {
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.dropzone-uploading-text {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Sections inside shelf */
+.shelf-section-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px 0;
+}
+
+.shelf-empty-state {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Link list */
+.inspiration-link-list,
+.inspiration-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspiration-link-item,
+.inspiration-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.inspiration-link-info,
+.inspiration-file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.inspiration-link-url {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspiration-link-url:hover {
+  text-decoration: underline;
+  color: var(--accent);
+}
+
+.inspiration-link-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.inspiration-file-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.inspiration-file-size {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.btn-remove-link,
+.btn-remove-file {
+  font-size: 11px;
+  padding: 3px 8px;
+  color: var(--text-muted);
+}
+
+.btn-remove-link:hover,
+.btn-remove-file:hover {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+/* Platform badge */
+.badge-platform {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-platform.badge-youtube {
+  color: #ff4e45;
+  border-color: rgba(255, 78, 69, 0.3);
+}
+
+.badge-platform.badge-instagram {
+  color: #e1306c;
+  border-color: rgba(225, 48, 108, 0.3);
+}
+
+.badge-platform.badge-tiktok {
+  color: #25f4ee;
+  border-color: rgba(37, 244, 238, 0.3);
+}
+
+.badge-platform.badge-x {
+  color: #f0f3f6;
+}
+
+.badge-platform.badge-facebook {
+  color: #1877f2;
+  border-color: rgba(24, 119, 242, 0.3);
+}
