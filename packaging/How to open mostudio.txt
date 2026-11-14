@@ -1,0 +1,20 @@
+How to open mostudio (first time only)
+
+1. Double-click the zip you downloaded. A "mostudio" folder appears.
+   Move it wherever you like (for example into Applications).
+2. Open the folder and double-click "Start mostudio".
+3. macOS says it can't check the app for malware. Click "Done" (not "Move to Trash").
+4. Open System Settings > Privacy & Security. Scroll down to the message about
+   "Start mostudio" and click "Open Anyway". Confirm with your password or Touch ID.
+5. Double-click "Start mostudio" again and click "Open".
+   A small Terminal window opens and your browser shows mostudio.
+
+Every next time: just double-click "Start mostudio".
+Keep the Terminal window open while you work. Close it to quit mostudio.
+
+Why the warning? mostudio is not signed by Apple yet. It runs only on your Mac;
+your videos and keys never leave it, except the audio sent to the AI service
+you choose (Groq, Gemini…) for transcription and subtitles.
+
+Updating: download the new zip and replace the old "mostudio" folder.
+Your videos (Movies/mostudio) and keys (~/.mostudio) are kept.

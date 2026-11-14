@@ -46,11 +46,15 @@ export async function initApp(
 ): Promise<{ navigate(hash: string): Promise<void>; destroy(): void }> {
   const api = customApi ?? createApi();
   let needsSetup = false;
+  let appVersion = "0.1.0";
   let currentCleanup: (() => void) | void;
 
   try {
     const setup = await api.get<SetupState>("/api/setup");
     needsSetup = Boolean(setup.needsSetup);
+    if (setup.version) {
+      appVersion = setup.version;
+    }
   } catch {
     needsSetup = false;
   }
@@ -72,7 +76,8 @@ export async function initApp(
       h("span", { class: "accent-dot" }),
       "mostudio"
     ),
-    h("div", { class: "nav-tabs" }, ...tabElements)
+    h("div", { class: "nav-tabs" }, ...tabElements),
+    h("footer", { class: "nav-footer", "data-testid": "app-footer" }, `mostudio ${appVersion}`)
   );
 
   const mainContent = h("main", {

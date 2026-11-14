@@ -82,3 +82,12 @@ test("lock file is complete", () => {
   assert.match(lock.ffmpeg.x64.ffprobe.url, /^https:\/\//);
   assert.match(lock.ffmpeg.x64.ffprobe.sha256, shaRegex);
 });
+
+test("first-open guide contains required macOS Gatekeeper steps and safe punctuation", () => {
+  const p = "/Volumes/1TBT705CRUCIAL/mo-projects/mostudio/packaging/How to open mostudio.txt";
+  const text = readFileSync(p, "utf8");
+  assert.match(text, /Open Anyway/);
+  assert.match(text, /Privacy & Security/);
+  assert.match(text, /Movies\/mostudio/);
+  assert.doesNotMatch(text, /--/);
+});

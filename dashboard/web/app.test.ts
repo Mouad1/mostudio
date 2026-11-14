@@ -403,3 +403,34 @@ test("app navigates to #settings", async () => {
     cleanupDom();
   }
 });
+
+test("app shows version in footer from /api/setup", async () => {
+  const cleanupDom = setupMockDom();
+  try {
+    const container = new MockElement("div");
+    const mockApi: Partial<Api> = {
+      async get(path: string) {
+        if (path === "/api/setup") {
+          return {
+            needsSetup: false,
+            workspace: "/Users/test/Movies/mostudio",
+            suggestedWorkspace: "/Users/test/Movies/mostudio",
+            checks: [],
+            hasAiKey: true,
+            packaged: false,
+            version: "0.1.0",
+          } as SetupState as any;
+        }
+        if (path === "/api/projects") return { projects: [] };
+        throw new Error("unexpected: " + path);
+      },
+    };
+    const app = await initApp(container as any, mockApi as any);
+    const footer = container.querySelector(".nav-footer");
+    assert.ok(footer);
+    assert.equal(footer.textContent, "mostudio 0.1.0");
+    app.destroy();
+  } finally {
+    cleanupDom();
+  }
+});
