@@ -132,7 +132,7 @@ test("version comes from package.json", async () => {
   try {
     const s = (await (await d.api("/api/setup")).json()) as SetupState;
     assert.equal(typeof s.version, "string");
-    assert.equal(s.version, "0.0.0");
+    assert.equal(s.version, "0.1.0");
   } finally {
     await d.close();
   }

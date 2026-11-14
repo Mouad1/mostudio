@@ -8,8 +8,18 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "es2023",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "skipLibCheck": true
   },
-  "include": ["core", "cli", "steps", "spikes", "tests", "dashboard/src/**/*"]
+  "include": [
+    "core",
+    "cli",
+    "steps",
+    "spikes",
+    "tests",
+    "dashboard/src/**/*",
+    "scripts"
+  ]
 }

@@ -1,6 +1,6 @@
 {
   "name": "mostudio",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Video editing CLI and agent skill",
   "license": "MIT",
@@ -14,7 +14,8 @@
   },
   "scripts": {
     "test": "node --test \"**/*.test.ts\"",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p dashboard/web"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p dashboard/web",
+    "package:mac": "node scripts/package-mac.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
