@@ -1,3 +1,5 @@
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -594,4 +596,96 @@ test("init with relative --dir resolves against cwd", async () => {
   assert.equal(exitCode, 0);
   const settings = await readAppSettings(home);
   assert.equal(settings.workspace, join(cwd, "relative-ws"));
+});
+
+
+async function waitFor(fn: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (!fn()) {
+    if (Date.now() - start > timeoutMs) throw new Error("waitFor timed out");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+test("ui starts, prints the address, stops on abort", async () => {
+  const ac = new AbortController();
+  reset();
+  const p = main(["ui", "--port", "0"], { ...mk(), signal: ac.signal }, steps);
+  await waitFor(() => /Open this link: http:\/\/127\.0\.0\.1:\d+\/\?t=/.test(out()));
+  const link = /Open this link: (\S+)/.exec(out())![1]!;
+  assert.equal((await fetch(link, { redirect: "manual" })).status, 302);
+  ac.abort();
+  assert.equal(await p, 0);
+  assert.match(out(), /^mostudio is running at http:\/\/127\.0\.0\.1:\d+/m);
+  assert.match(out(), /Keep this window open while you work\. Close it \(or press Ctrl\+C\) to stop\./);
+});
+
+test("--open hands the link to the opener and does not print it", async () => {
+  const ac = new AbortController();
+  reset();
+  let openedUrl = "";
+  const p = main(
+    ["ui", "--port", "0", "--open"],
+    {
+      ...mk(),
+      signal: ac.signal,
+      openUrl: async (u) => {
+        openedUrl = u;
+      },
+    },
+    steps,
+  );
+  await waitFor(() => /mostudio is running at http:\/\/127\.0\.0\.1:\d+/.test(out()));
+  assert.ok(openedUrl.startsWith("http://127.0.0.1:"));
+  assert.match(openedUrl, /\/\?t=/);
+  assert.doesNotMatch(out(), /\?t=/);
+  assert.doesNotMatch(out(), /Open this link:/);
+  ac.abort();
+  assert.equal(await p, 0);
+});
+
+test("busy --port exits 1 with a plain hint", async () => {
+  const srv = http.createServer();
+  await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", () => resolve()));
+  const port = (srv.address() as AddressInfo).port;
+  try {
+    reset();
+    const code = await main(["ui", "--port", String(port)], mk(), steps);
+    assert.equal(code, 1);
+    assert.equal(err(), `Port ${port} is busy. Start without --port to pick a free one.\n`);
+  } finally {
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+  }
+});
+
+test("dashboard is an alias for ui", async () => {
+  const ac = new AbortController();
+  reset();
+  const p = main(["dashboard", "--port", "0"], { ...mk(), signal: ac.signal }, steps);
+  await waitFor(() => /Open this link: http:\/\/127\.0\.0\.1:\d+\/\?t=/.test(out()));
+  ac.abort();
+  assert.equal(await p, 0);
+});
+
+test("ui works without a workspace (root: undefined)", async () => {
+  const ac = new AbortController();
+  reset();
+  const noWsCwd = mkdtempSync(join(tmpdir(), "mostudio-noworkspace-"));
+  try {
+    const p = main(
+      ["ui", "--port", "0"],
+      {
+        ...mk(),
+        cwd: noWsCwd,
+        root: undefined,
+        signal: ac.signal,
+      },
+      steps,
+    );
+    await waitFor(() => /Open this link: http:\/\/127\.0\.0\.1:\d+\/\?t=/.test(out()));
+    ac.abort();
+    assert.equal(await p, 0);
+  } finally {
+    rmSync(noWsCwd, { recursive: true, force: true });
+  }
 });

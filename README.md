@@ -77,6 +77,20 @@ One project runs one workflow: the first `run` records its name in `steps/workfl
 
 `--param` values are remembered per project and workflow (`steps/workflow-params.json`, `{ <workflow>: { <step>: { <key>: <value> } } }`; the older flat file is migrated when read), so re-runs resume without repeating them (e.g. `ingest.source`); to change one, pass it again, and to forget one pass an empty value (`--param ingest.source=`). Params are validated against the step's contract before being remembered; a typo exits 64 and saves nothing. `--force <step>` on an approval step also clears its approval. `mostudio status --project <dir>` lists each step's latest result and marks an approval step of the project's workflow that is still "awaiting approval". State files such as `steps/approvals.json` have no lock: don't run two commands on the same project at once.
 
+## Dashboard UI
+
+Start the local dashboard server:
+
+```
+mostudio ui [--port <n>] [--open]
+```
+
+Alias: `mostudio dashboard`.
+
+- `--port <n>`: Bind to a specific port. By default, picks a free port between 4317 and 4327.
+- `--open`: Open the dashboard URL directly in the browser instead of printing the link.
+- Press `Ctrl+C` or close the terminal window to stop the dashboard cleanly.
+
 ## Test
 
 ```

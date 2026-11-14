@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { startDashboard } from "../../dashboard/src/server.ts";
 import {
   approveStep,
   checkSystem,
@@ -20,6 +21,7 @@ import {
   readLedger,
   readProjectWorkflow,
   resolveShared,
+  runBin,
   scaffoldWorkspace,
   runStep,
   runWorkflow,
@@ -39,6 +41,8 @@ export type Io = {
   /** Repo root holding providers.json, mostudio.config.json and .env.local (tests override it). */
   root?: string;
   system?: Partial<SystemDeps>;
+  signal?: AbortSignal;
+  openUrl?: (url: string) => Promise<void>;
 };
 
 /** Repo root: io.root, else MOSTUDIO_ROOT, else nearest ancestor workspace, else package root. */
@@ -55,6 +59,7 @@ const USAGE = `usage:
   mostudio status --project <dir> [--json]
   mostudio run <workflow> --project <dir> [--param <step>.<key>=<value>]... [--force <step>]... [--switch-workflow] [--auto] [--json]
   mostudio approve <step> --project <dir>
+  mostudio ui [--port <n>] [--open]
 `;
 
 class UsageError extends Error {}
@@ -74,10 +79,12 @@ type Parsed = {
   switchWorkflow: boolean;
   /** `run` only: auto-approve steps waiting for approval. */
   auto: boolean;
+  port?: number;
+  open: boolean;
 };
 
 function parseArgs(args: string[]): Parsed {
-  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false, switchWorkflow: false, auto: false };
+  const p: Parsed = { positional: [], params: {}, force: false, forceSteps: [], json: false, help: false, switchWorkflow: false, auto: false, open: false };
   const isRun = args[0] === "run";
   const value = (i: number, flag: string): string => {
     const v = args[i];
@@ -98,6 +105,12 @@ function parseArgs(args: string[]): Parsed {
       if (isRun) p.forceSteps.push(value(++i, a));
       else p.force = true;
     }
+    else if (a === "--port") {
+      const v = value(++i, a);
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0) throw new UsageError(`--port expects a non-negative integer, got ${JSON.stringify(v)}`);
+      p.port = n;
+    } else if (a === "--open") p.open = true;
     else if (a === "--json") p.json = true;
     else if (a === "--switch-workflow" && isRun) p.switchWorkflow = true;
     else if (a === "--auto" && isRun) p.auto = true;
@@ -336,6 +349,55 @@ async function cmdInit(p: Parsed, io: Io, env: Record<string, string>): Promise<
   return 0;
 }
 
+
+async function cmdUi(
+  p: Parsed,
+  io: Io,
+  env: Record<string, string>,
+  steps: Record<string, StepModule>,
+): Promise<number> {
+  if (p.positional.length > 1) throw new UsageError(`${p.positional[0]} takes no positional arguments`);
+  const root = io.root ?? io.env.MOSTUDIO_ROOT ?? findWorkspace(io.cwd);
+  const packaged = env.MOSTUDIO_PACKAGED === "1";
+  let d;
+  try {
+    d = await startDashboard({
+      home: io.env.MOSTUDIO_HOME,
+      root,
+      port: p.port,
+      steps,
+      processEnv: env,
+      packaged,
+    });
+  } catch (err) {
+    if (p.port !== undefined && ((err as NodeJS.ErrnoException).code === "EADDRINUSE" || (err as Error).message?.includes("EADDRINUSE"))) {
+      io.stderr(`Port ${p.port} is busy. Start without --port to pick a free one.\n`);
+      return 1;
+    }
+    throw err;
+  }
+
+  io.stdout(
+    `mostudio is running at http://127.0.0.1:${d.port}\nKeep this window open while you work. Close it (or press Ctrl+C) to stop.\n`,
+  );
+
+  const link = `${d.url}/?t=${d.token}`;
+  if (p.open) {
+    const openUrl = io.openUrl ?? (async (u: string) => { await runBin("open", [u]); });
+    await openUrl(link);
+  } else {
+    io.stdout(`Open this link: ${link}\n`);
+  }
+
+  await new Promise<void>((resolve) => {
+    if (io.signal?.aborted) return resolve();
+    io.signal?.addEventListener("abort", () => resolve(), { once: true });
+  });
+
+  await d.close();
+  return 0;
+}
+
 export async function main(
   argv: string[],
   io: Io,
@@ -349,7 +411,7 @@ export async function main(
       return 0;
     }
     const command = p.positional[0];
-    if (command !== "init" && command !== "new" && command !== "step" && command !== "status" && command !== "run" && command !== "approve") {
+    if (command !== "init" && command !== "new" && command !== "step" && command !== "status" && command !== "run" && command !== "approve" && command !== "ui" && command !== "dashboard") {
       io.stderr(command ? `unknown command: ${command}\n${USAGE}` : USAGE);
       return 64;
     }
@@ -360,6 +422,7 @@ export async function main(
     if (command === "step") return await cmdStep(p, io, env, steps);
     if (command === "run") return await cmdRun(p, io, env, steps);
     if (command === "approve") return await cmdApprove(p, io);
+    if (command === "ui" || command === "dashboard") return await cmdUi(p, io, env, steps);
     return await cmdStatus(p, io, steps);
   } catch (err) {
     if (err instanceof WorkflowMismatchError) {
