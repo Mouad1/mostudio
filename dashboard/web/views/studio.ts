@@ -1,4 +1,6 @@
-import { PROJECT_ID_RE, type ProjectStatus, type ProjectSummary } from "../../src/types.ts";
+import type { ProjectStatus, ProjectSummary } from "../../src/types.ts";
+
+const PROJECT_ID_RE = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 import type { Api } from "../lib/api.ts";
 import { h } from "../lib/dom.ts";
 import { errorBox } from "./error-box.ts";
