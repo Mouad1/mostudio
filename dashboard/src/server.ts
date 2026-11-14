@@ -20,6 +20,8 @@ import {
   sendJson,
   sessionCookie,
 } from "./http.ts";
+import { registerFinderRoutes } from "./routes/finder.ts";
+import { registerInspirationRoutes } from "./routes/inspiration.ts";
 import { serveWeb } from "./static.ts";
 
 export type DashboardOptions = {
@@ -163,6 +165,9 @@ export async function startDashboard(o: DashboardOptions = {}): Promise<{
       root: ctx.root ?? null,
     });
   });
+
+  registerInspirationRoutes(router, ctx);
+  registerFinderRoutes(router, ctx);
 
   if (o.testRoutes) {
     o.testRoutes(router);
