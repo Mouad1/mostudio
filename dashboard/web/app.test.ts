@@ -350,3 +350,56 @@ test("app navigates to #tools", async () => {
     cleanupDom();
   }
 });
+
+test("app navigates to #settings", async () => {
+  const cleanupDom = setupMockDom();
+  try {
+    assert.ok(routes["#settings"], "#settings route must be registered");
+
+    const container = new MockElement("div");
+
+    const mockApi: Partial<Api> = {
+      async get(path: string) {
+        if (path === "/api/setup") {
+          return {
+            needsSetup: false,
+            workspace: "/Users/test/Movies/mostudio",
+            suggestedWorkspace: "/Users/test/Movies/mostudio",
+            checks: [],
+            hasAiKey: true,
+            packaged: false,
+            version: "0.0.0",
+          } as SetupState as any;
+        }
+        if (path === "/api/projects") {
+          return { projects: [] };
+        }
+        if (path === "/api/settings") {
+          return {
+            keysFile: "/Users/test/.env",
+            fields: [],
+            animatedCaptions: false,
+          };
+        }
+        throw new Error("unexpected path: " + path);
+      },
+    };
+
+    const app = await initApp(container as any, mockApi as any);
+    await new Promise((r) => setTimeout(r, 20));
+
+    await app.navigate("#settings");
+    await new Promise((r) => setTimeout(r, 20));
+
+    assert.equal((globalThis as any).window.location.hash, "#settings");
+
+    const main = container.querySelector("#main-content");
+    assert.ok(main);
+    assert.ok(main.textContent.includes("Settings"));
+    assert.ok(main.textContent.includes("Your keys stay on this Mac"));
+
+    app.destroy();
+  } finally {
+    cleanupDom();
+  }
+});
