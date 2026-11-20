@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mostudio.local/schemas/step-result.schema.json",
+  "title": "StepResult",
+  "description": "Documentation only; mirrors StepResult in core/src/types.ts. Not validated at runtime.",
+  "type": "object",
+  "required": ["step", "status", "startedAt", "endedAt", "durationMs", "inputsHash", "metrics", "verdicts", "artifacts"],
+  "properties": {
+    "step": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "status": { "enum": ["pass", "warn", "fail"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "endedAt": { "type": "string", "format": "date-time" },
+    "durationMs": { "type": "number" },
+    "inputsHash": { "type": "string" },
+    "metrics": { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean"] } },
+    "verdicts": { "type": "array", "items": { "$ref": "#/$defs/verdict" } },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "provider": {
+      "type": "object",
+      "required": ["id", "model"],
+      "properties": { "id": { "type": "string" }, "model": { "type": "string" } }
+    },
+    "quota": { "type": "object", "additionalProperties": { "type": "number" } },
+    "error": { "type": "string" }
+  },
+  "$defs": {
+    "threshold": {
+      "type": "object",
+      "required": ["metric", "op", "value", "level"],
+      "properties": {
+        "metric": { "type": "string" },
+        "op": { "enum": ["<", "<=", ">", ">=", "==", "between"] },
+        "value": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+            { "type": "string" },
+            { "type": "boolean" }
+          ]
+        },
+        "level": { "enum": ["warn", "fail"] }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["metric", "threshold", "ok"],
+      "properties": {
+        "metric": { "type": "string" },
+        "actual": { "type": ["number", "string", "boolean"], "description": "Absent when the metric was not measured." },
+        "threshold": { "$ref": "#/$defs/threshold" },
+        "ok": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "mostudio",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "description": "Video editing CLI and agent skill",
+  "license": "MIT",
+  "author": "Mouad Belghiti",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "mostudio": "cli/bin/mostudio.ts"
+  },
+  "scripts": {
+    "test": "node --test \"**/*.test.ts\"",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p dashboard/web",
+    "package:mac": "node scripts/package-mac.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

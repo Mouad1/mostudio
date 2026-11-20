@@ -1,0 +1,21 @@
+{
+  "name": "assemble",
+  "version": "7",
+  "inputs": [
+    "media/ingest.json",
+    "cut/edl.json",
+    "audio/mix.wav",
+    "captions/captions.ass",
+    "captions/captions.srt",
+    "captions/cues.json"
+  ],
+  "outputs": ["renders/final.mp4", "renders/final.srt"],
+  "params": { "preset": "string?", "burnCaptions": "boolean?", "captionsRenderer": "string?" },
+  "private": true,
+  "gate": [
+    { "metric": "avOffsetMs", "op": "<=", "value": 40, "level": "fail" },
+    { "metric": "durationDeltaSec", "op": "<=", "value": 0.5, "level": "fail" },
+    { "metric": "endDriftMs", "op": "<=", "value": 80, "level": "fail" },
+    { "metric": "socialDurationOk", "op": "==", "value": true, "level": "warn" }
+  ]
+}

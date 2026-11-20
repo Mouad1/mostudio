@@ -1,0 +1,129 @@
+{
+  "note": "Trimmed from a real Groq whisper-large-v3 transcript (words 126-145). Word 137 \"with\" starts at 65.9, before the preceding \"skin\" (66.1-66.38), and spans to 66.98.",
+  "provider": {
+    "id": "groq",
+    "model": "whisper-large-v3"
+  },
+  "words": [
+    {
+      "w": "because",
+      "start": 61.72,
+      "end": 62.12,
+      "conf": 0.788
+    },
+    {
+      "w": "it",
+      "start": 62.12,
+      "end": 62.32,
+      "conf": 0.788
+    },
+    {
+      "w": "provides",
+      "start": 62.32,
+      "end": 62.82,
+      "conf": 0.788
+    },
+    {
+      "w": "effective,",
+      "start": 62.82,
+      "end": 63.78,
+      "conf": 0.788
+    },
+    {
+      "w": "immediate",
+      "start": 63.78,
+      "end": 64.34,
+      "conf": 0.788
+    },
+    {
+      "w": "and",
+      "start": 64.34,
+      "end": 64.66,
+      "conf": 0.788
+    },
+    {
+      "w": "long-lasting",
+      "start": 64.66,
+      "end": 65.3,
+      "conf": 0.788
+    },
+    {
+      "w": "effects",
+      "start": 65.3,
+      "end": 65.76,
+      "conf": 0.788
+    },
+    {
+      "w": "on",
+      "start": 65.76,
+      "end": 65.92,
+      "conf": 0.788
+    },
+    {
+      "w": "the",
+      "start": 65.92,
+      "end": 66.1,
+      "conf": 0.788
+    },
+    {
+      "w": "skin",
+      "start": 66.1,
+      "end": 66.38,
+      "conf": 0.788
+    },
+    {
+      "w": "with",
+      "start": 65.9,
+      "end": 66.98,
+      "conf": 0.788
+    },
+    {
+      "w": "a",
+      "start": 66.98,
+      "end": 67.12,
+      "conf": 0.788
+    },
+    {
+      "w": "fair",
+      "start": 67.12,
+      "end": 67.32,
+      "conf": 0.788
+    },
+    {
+      "w": "price",
+      "start": 67.32,
+      "end": 67.78,
+      "conf": 0.788
+    },
+    {
+      "w": "of",
+      "start": 67.78,
+      "end": 68.34,
+      "conf": 0.788
+    },
+    {
+      "w": "20",
+      "start": 68.34,
+      "end": 68.64,
+      "conf": 0.788
+    },
+    {
+      "w": "dirhams",
+      "start": 68.64,
+      "end": 68.96,
+      "conf": 0.788
+    },
+    {
+      "w": "per",
+      "start": 68.96,
+      "end": 69.22,
+      "conf": 0.788
+    },
+    {
+      "w": "unit.",
+      "start": 69.22,
+      "end": 70.58,
+      "conf": 0.788
+    }
+  ]
+}

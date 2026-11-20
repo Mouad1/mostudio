@@ -1,0 +1,34 @@
+How to open mostudio (first time only)
+
+The bundled video engine requires macOS 12 or later.
+
+Find your ZIP
+
+GitHub Releases > Assets: https://github.com/Mouad1/mostudio/releases
+Choose the ZIP ending in -mac-arm64.zip. It runs on Apple Silicon Macs
+(M1 or newer). On an Intel Mac, run mostudio from source (see README).
+
+Downloaded ZIP -> Finder > Downloads -> mostudio folder -> Start mostudio
+Locally built ZIP -> checkout > dist -> mostudio folder -> Start mostudio
+
+1. In Finder, open Downloads for a browser download. If you saved it elsewhere,
+   use "Show in Finder" in your browser's downloads list. Open "dist" for
+   a locally built ZIP. Double-click the ZIP to extract the "mostudio" folder.
+   If Finder already shows that folder, open it directly.
+2. Open the folder and double-click "Start mostudio".
+3. macOS says it can't check the app for malware. Click "Done" (not "Move to Trash").
+4. Open System Settings > Privacy & Security. Scroll down to the message about
+   "Start mostudio" and click "Open Anyway". Confirm with your password or Touch ID.
+5. Double-click "Start mostudio" again and click "Open".
+   A small Terminal window opens and your browser shows mostudio.
+
+Every next time: just double-click "Start mostudio".
+Keep the Terminal window open while you work. Close it to quit mostudio.
+
+This build is unsigned. Only use Open Anyway for a ZIP from a source you trust.
+The dashboard runs on your Mac. If you configure a cloud AI provider, it
+receives the audio or text needed for the steps you run.
+
+To update, extract the new ZIP and replace the old "mostudio" app folder.
+Keep your workspace separate from the app folder. The default workspace is
+"Movies/mostudio" in your home folder. App settings are saved in "~/.mostudio".

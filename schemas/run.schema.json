@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mostudio.local/schemas/run.schema.json",
+  "title": "Ledger (run.json)",
+  "description": "Documentation only; mirrors Ledger in core/src/ledger.ts. Not validated at runtime.",
+  "type": "object",
+  "required": ["version", "project", "createdAt", "steps"],
+  "properties": {
+    "version": { "const": 1 },
+    "project": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "steps": {
+      "type": "object",
+      "description": "History per step name, newest last.",
+      "propertyNames": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "array",
+        "items": { "$ref": "step-result.schema.json" }
+      }
+    }
+  }
+}
