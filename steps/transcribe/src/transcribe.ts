@@ -17,9 +17,10 @@ import {
 } from "../../../core/src/index.ts";
 import type { FetchLike, PickedProvider, StepContract, StepModule, Word } from "../../../core/src/index.ts";
 import contract from "../contract.json" with { type: "json" };
-import { planChunks, WINDOW_SEC, WINDOW_SLACK_SEC } from "./chunk.ts";
+import { planChunks, WINDOW_MIN_TAIL_SEC, WINDOW_SEC, WINDOW_SLACK_SEC } from "./chunk.ts";
 import { transcribeCloudflare } from "./cloudflare.ts";
 import { choosePass, darijaPrompt, msaScore } from "./darija.ts";
+import { dropCollapsedRuns, dropPromptEcho } from "./echo.ts";
 import { dropHallucinations } from "./hallucinations.ts";
 import { buildSegments, transcribeWhisperCpp } from "./whisper-cpp.ts";
 import { hasSound, tightenToVoice } from "./voice.ts";
@@ -70,7 +71,7 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       const durationSec = round3((env.length * WINDOW_MS) / 1000);
       // Whisper invents words over silence ("Thank you."), so a clip with no sound is never sent: zero words, gate fails
       const silent = !hasSound(env);
-      const chunks = silent ? [] : dialect ? planChunks(durationSec, env, WINDOW_MS, WINDOW_SEC, WINDOW_SLACK_SEC) : planChunks(durationSec, env, WINDOW_MS);
+      const chunks = silent ? [] : dialect ? planChunks(durationSec, env, WINDOW_MS, WINDOW_SEC, WINDOW_SLACK_SEC, WINDOW_MIN_TAIL_SEC) : planChunks(durationSec, env, WINDOW_MS);
       if (silent) ctx.log(`audio ${durationSec}s has no sound: nothing to transcribe`);
       else ctx.log(`audio ${durationSec}s, ${chunks.length} ${dialect ? `${dialect} window(s)` : "chunk(s)"}`);
 
@@ -114,6 +115,8 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       let detected: string | undefined;
       // providers that hit a rate limit or rejected the key are not retried for later chunks of this run
       const dead = new Set<string>();
+      let promptEchoDropped = 0;
+      let collapsedDropped = 0;
       const stt = async (i: number, call: Call, label: string) => {
         const { result, provider, attempts } = await withProvider(
           ctx.providers,
@@ -129,7 +132,15 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
           ctx.log(`${label}: ${a.id} failed, rotating: ${a.error}`);
           if (a.status === 429 || a.status === 401 || a.status === 403) dead.add(a.id);
         }
-        return { result, provider };
+        // text with no speech under it goes before any pass is judged: the prompt read back, then 20 ms-per-word runs
+        const segs = result.segments.length > 0 ? result.segments : buildSegments(result.words);
+        const echo = dropPromptEcho(result.words, segs, call.prompt);
+        const runs = dropCollapsedRuns(echo.words, echo.segments);
+        if (echo.dropped > 0) ctx.log(`${label}: dropped ${echo.dropped} word(s) that read the prompt back`);
+        if (runs.dropped > 0) ctx.log(`${label}: dropped ${runs.dropped} repeated/translated word(s) with no audio under them (~20 ms each)`);
+        promptEchoDropped += echo.dropped;
+        collapsedDropped += runs.dropped;
+        return { result: { ...result, words: runs.words, segments: runs.segments }, provider };
       };
       // Darija: pass A = forced Arabic + Darija prompt; pass B (auto language) runs only when A reads as MSA,
       // since B is chosen only then (French/English speech that forcing `ar` translated into MSA).
@@ -211,6 +222,8 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
         nonSpeechDropped,
         silentAudio: silent,
         hallucinationsDropped: clean.dropped,
+        promptEchoDropped,
+        collapsedDropped,
         wordsTightened: tight.tightened,
         wordsCapped,
       };
