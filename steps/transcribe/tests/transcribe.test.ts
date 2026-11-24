@@ -9,7 +9,7 @@ import { NoProviderError, resolveBin, rmsEnvelope, runBin, runStep, writeJsonAto
 import { buildSegments, parseWhisperCpp } from "../src/whisper-cpp.ts";
 import { transcribeCloudflare } from "../src/cloudflare.ts";
 import { planChunks } from "../src/chunk.ts";
-import { choosePass, DARIJA_PROMPT, darijaPrompt, isFrenchOrEnglish, msaScore, normalizeArabic } from "../src/darija.ts";
+import { DARIJA_PROMPT, darijaPrompt, isFrenchOrEnglish, normalizeArabic, readsAsMsa } from "../src/darija.ts";
 import { dropHallucinations, isHallucination, normalizeText } from "../src/hallucinations.ts";
 import { createTranscribe } from "../src/transcribe.ts";
 
@@ -392,24 +392,19 @@ test("normalizeArabic folds alef/hamza variants and strips harakat", () => {
   assert.equal(normalizeArabic("أيضاً إلى آخر"), "ايضا الي اخر");
 });
 
-test("msaScore: MSA markers minus Darija markers", () => {
-  assert.equal(msaScore("سوف نريك الكثير من المشاهدين الذين يتابعون"), 2);
-  assert.equal(msaScore("دابا غادي نشرح ليكم كيفاش كنخدم"), -3);
-  assert.equal(msaScore("وسوف نحن، ايضا!"), 3);
-  assert.equal(msaScore("bonjour"), 0);
-  assert.equal(msaScore("سوف ديال"), 0);
+test("readsAsMsa: an MSA marker not outweighed by Darija markers, conjunction و included", () => {
+  assert.equal(readsAsMsa("سوف نريك الكثير من المشاهدين الذين يتابعون"), true);
+  assert.equal(readsAsMsa("دابا غادي نشرح ليكم كيفاش كنخدم"), false);
+  assert.equal(readsAsMsa("وسوف نحن، ايضا!"), true);
+  assert.equal(readsAsMsa("bonjour"), false);
+  // one MSA marker against one Darija marker is not enough Darija
+  assert.equal(readsAsMsa("سوف ديال"), true);
+  assert.equal(readsAsMsa("سوف ديال هاد"), false);
 });
 
 test("isFrenchOrEnglish accepts names and codes in any case", () => {
   for (const l of ["french", "FR", "English", "en"]) assert.equal(isFrenchOrEnglish(l), true, l);
   for (const l of ["arabic", "ar", "", undefined]) assert.equal(isFrenchOrEnglish(l), false, String(l));
-});
-
-test("choosePass picks B only for French/English auto when A reads as MSA", () => {
-  assert.equal(choosePass("سوف نشرح لكم", "french"), "B");
-  assert.equal(choosePass("سوف نشرح لكم", "arabic"), "A");
-  assert.equal(choosePass("دابا غادي نشرح", "french"), "A");
-  assert.equal(choosePass("", "english"), "A");
 });
 
 test("darijaPrompt appends the user's prompt", () => {
@@ -492,8 +487,9 @@ test("darija: forced-ar pass by default, auto pass only for French speech that A
   assert.equal(r.metrics.windows, 3);
   assert.equal(r.metrics.autoWindows, 1);
   assert.equal(r.metrics.chunks, 3);
-  // window 0: A only (Darija); windows 1 and 2: A then B
-  assert.deepEqual(calls.map((c) => [c.file.slice(-7, -4), c.language]), [["000", "ar"], ["001", "ar"], ["001", null], ["002", "ar"], ["002", null]]);
+  // window 0: A only (Darija); window 1: A then B (French replaces the MSA); window 2: A, B (Arabic, unused), A retry
+  assert.deepEqual(calls.map((c) => [c.file.slice(-7, -4), c.language]), [["000", "ar"], ["001", "ar"], ["001", null], ["002", "ar"], ["002", null], ["002", "ar"]]);
+  assert.equal(r.metrics.retrySegments, 0);
   for (const c of calls.filter((x) => x.language === "ar")) assert.equal(c.prompt, `${DARIJA_PROMPT} mostudio`);
   for (const c of calls.filter((x) => x.language === null)) assert.equal(c.prompt, null);
   const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
@@ -527,6 +523,94 @@ test("darija on a real 68 s clip: no prompt echo, no repeated or translated line
   assert.doesNotMatch(text, /واش واضح|كيسولوني|نوريكم|L'objectif|Je connais/);
   assert.equal(text.split("السلام").length - 1, 1);
   assert.doesNotMatch(j.segments.map((s: { text: string }) => s.text).join(" "), /واش واضح|L'objectif|Je connais/);
+});
+
+test("darija on a real 68 s clip: a stretch of French that forced Arabic made MSA takes the auto pass's words, the Darija stays", async () => {
+  // silent at 31.4 s, where the real clip's window cut is, so the fixture timings line up
+  await seed("intro2.wav", "sine=frequency=440:duration=68,volume='if(between(t,31.35,31.55),0,1)':eval=frame", 68);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const calls: string[] = [];
+  const fx = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const form = init?.body as FormData;
+      const win = /chunk-000/.test((form.get("file") as File).name) ? 1 : 2;
+      const lang = form.get("language") ?? "auto";
+      calls.push(`${win}:${lang}`);
+      if (win === 1) return new Response(fx("groq-darija-w0.json"), { status: 200 });
+      return new Response(fx(lang === "ar" ? "groq-darija-w2-a.json" : "groq-darija-w2-auto.json"), { status: 200 });
+    },
+  });
+  const r = await runStep(dir, step, { params: { dialect: "darija" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  // window 1 is Darija throughout: no auto pass
+  assert.deepEqual(calls, ["1:ar", "2:ar", "2:auto"]);
+  assert.equal(r.metrics.autoWindows, 1);
+  assert.equal(r.metrics.autoSegments, 1);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  const text = j.words.map((w: { w: string }) => w.w).join(" ");
+  assert.match(text, /نبارتاجي معاكم دي اوتي orientés à la productivité, etc\. Donc voilà, à bientôt dans la première vidéo\.$/);
+  assert.match(text, /^السلام أصدقاء/);
+  assert.doesNotMatch(text, /ذلك|وشكرا لكم/);
+});
+
+test("darija: a pass A that drifted into MSA where auto hears Arabic is retried once; the retry's Darija replaces the MSA segment", async () => {
+  await seed("intro3.wav", "sine=frequency=440:duration=68,volume='if(between(t,31.35,31.55),0,1)':eval=frame", 68);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const calls: string[] = [];
+  const fx = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+  let w1ar = 0;
+  const logs: string[] = [];
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const form = init?.body as FormData;
+      const win = /chunk-000/.test((form.get("file") as File).name) ? 1 : 2;
+      const lang = form.get("language") ?? "auto";
+      calls.push(`${win}:${lang}`);
+      if (win === 1 && lang === "ar") return new Response(fx(w1ar++ === 0 ? "groq-darija-w0-drift.json" : "groq-darija-w0.json"), { status: 200 });
+      if (win === 1) return new Response(fx("groq-darija-w0-auto.json"), { status: 200 });
+      return new Response(fx(lang === "ar" ? "groq-darija-w2-a.json" : "groq-darija-w2-auto.json"), { status: 200 });
+    },
+  });
+  const r = await runStep(dir, step, { params: { dialect: "darija" }, ...ctxBase(registry), log: (m: string) => logs.push(m) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  // window 1: A drifted, auto heard Arabic, A retried; window 2: A, auto (French) replaces its MSA segment, no retry
+  assert.deepEqual(calls, ["1:ar", "1:auto", "1:ar", "2:ar", "2:auto"]);
+  assert.equal(r.metrics.retrySegments, 1);
+  assert.equal(r.metrics.autoSegments, 1);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  const text = j.words.map((w: { w: string }) => w.w).join(" ");
+  assert.match(text, /^السلام أصدقاء، أخيراً درت الفيديو الأول، story الأولى\. الـ objective ديال هاد/);
+  assert.doesNotMatch(text, /الآية|هذا الشأن|ذلك/);
+  assert.ok(logs.some((l) => /window 1: pass A retry for 1 segment/.test(l)), logs.join("\n"));
+});
+
+test("darija: a pass A segment translated whole into French takes the pass A retry's Darija; pass B's real French stays", async () => {
+  await seed("intro4.wav", "sine=frequency=440:duration=68,volume='if(between(t,31.35,31.55),0,1)':eval=frame", 68);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const calls: string[] = [];
+  const fx = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+  let w1ar = 0;
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const form = init?.body as FormData;
+      const win = /chunk-000/.test((form.get("file") as File).name) ? 1 : 2;
+      const lang = form.get("language") ?? "auto";
+      calls.push(`${win}:${lang}`);
+      if (win === 1) return new Response(fx(w1ar++ === 0 ? "groq-darija-w0-french.json" : "groq-darija-w0.json"), { status: 200 });
+      return new Response(fx(lang === "ar" ? "groq-darija-w2-a.json" : "groq-darija-w2-auto.json"), { status: 200 });
+    },
+  });
+  const r = await runStep(dir, step, { params: { dialect: "darija" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  // window 1: no MSA, so no auto pass; straight to the retry. window 2: auto French replaces MSA, no retry after it
+  assert.deepEqual(calls, ["1:ar", "1:ar", "2:ar", "2:auto"]);
+  assert.equal(r.metrics.retrySegments, 1);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  const text = j.words.map((w: { w: string }) => w.w).join(" ");
+  assert.match(text, /الـ objective ديال هاد/);
+  assert.doesNotMatch(text, /partager avec vous/);
+  assert.match(text, /Donc voilà, à bientôt dans la première vidéo\.$/);
 });
 
 test("without dialect, a segment that reads back the user's prompt is dropped", async () => {

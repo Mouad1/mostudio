@@ -1,0 +1,254 @@
+{
+ "language": "French",
+ "duration": 36.544311296,
+ "text": " On va essayer de discuter ou de partager ces choses. On va essayer de travailler sur des projets concrets. Ou on va partager avec vous des outils orientés à la productivité, etc. Donc voilà, à bientôt dans la première vidéo. oui",
+ "segments": [
+  {
+   "start": 0,
+   "end": 6,
+   "text": " On va essayer de discuter ou de partager ces choses.",
+   "avg_logprob": -0.48874125,
+   "no_speech_prob": 0.005458832,
+   "compression_ratio": 1.4840764
+  },
+  {
+   "start": 6,
+   "end": 10,
+   "text": " On va essayer de travailler sur des projets concrets.",
+   "avg_logprob": -0.48874125,
+   "no_speech_prob": 0.005458832,
+   "compression_ratio": 1.4840764
+  },
+  {
+   "start": 10,
+   "end": 19,
+   "text": " Ou on va partager avec vous des outils orientés à la productivité, etc.",
+   "avg_logprob": -0.48874125,
+   "no_speech_prob": 0.005458832,
+   "compression_ratio": 1.4840764
+  },
+  {
+   "start": 19,
+   "end": 25,
+   "text": " Donc voilà, à bientôt dans la première vidéo.",
+   "avg_logprob": -0.48874125,
+   "no_speech_prob": 0.005458832,
+   "compression_ratio": 1.4840764
+  },
+  {
+   "start": 25,
+   "end": 32.34,
+   "text": " oui",
+   "avg_logprob": -0.6771161,
+   "no_speech_prob": 0.09753418,
+   "compression_ratio": 0.33333334
+  }
+ ],
+ "words": [
+  {
+   "word": "On",
+   "start": 0,
+   "end": 0.34
+  },
+  {
+   "word": "va",
+   "start": 0.34,
+   "end": 0.38
+  },
+  {
+   "word": "essayer",
+   "start": 0.38,
+   "end": 0.4
+  },
+  {
+   "word": "de",
+   "start": 0.4,
+   "end": 1.5
+  },
+  {
+   "word": "discuter",
+   "start": 1.5,
+   "end": 2.08
+  },
+  {
+   "word": "ou",
+   "start": 2.08,
+   "end": 2.56
+  },
+  {
+   "word": "de",
+   "start": 2.56,
+   "end": 2.7
+  },
+  {
+   "word": "partager",
+   "start": 2.7,
+   "end": 3.24
+  },
+  {
+   "word": "ces",
+   "start": 3.24,
+   "end": 4.6
+  },
+  {
+   "word": "choses.",
+   "start": 4.6,
+   "end": 5.5
+  },
+  {
+   "word": "On",
+   "start": 6.96,
+   "end": 7.1
+  },
+  {
+   "word": "va",
+   "start": 7.1,
+   "end": 7.22
+  },
+  {
+   "word": "essayer",
+   "start": 7.22,
+   "end": 7.36
+  },
+  {
+   "word": "de",
+   "start": 7.36,
+   "end": 7.74
+  },
+  {
+   "word": "travailler",
+   "start": 7.74,
+   "end": 7.76
+  },
+  {
+   "word": "sur",
+   "start": 7.76,
+   "end": 7.88
+  },
+  {
+   "word": "des",
+   "start": 7.88,
+   "end": 7.98
+  },
+  {
+   "word": "projets",
+   "start": 7.98,
+   "end": 8.46
+  },
+  {
+   "word": "concrets.",
+   "start": 8.46,
+   "end": 10.26
+  },
+  {
+   "word": "Ou",
+   "start": 11.28,
+   "end": 12.5
+  },
+  {
+   "word": "on",
+   "start": 12.5,
+   "end": 12.82
+  },
+  {
+   "word": "va",
+   "start": 12.82,
+   "end": 13.32
+  },
+  {
+   "word": "partager",
+   "start": 13.32,
+   "end": 13.34
+  },
+  {
+   "word": "avec",
+   "start": 13.34,
+   "end": 13.4
+  },
+  {
+   "word": "vous",
+   "start": 13.4,
+   "end": 13.74
+  },
+  {
+   "word": "des",
+   "start": 13.74,
+   "end": 13.88
+  },
+  {
+   "word": "outils",
+   "start": 13.88,
+   "end": 14.44
+  },
+  {
+   "word": "orientés",
+   "start": 14.44,
+   "end": 16.84
+  },
+  {
+   "word": "à",
+   "start": 16.84,
+   "end": 17.08
+  },
+  {
+   "word": "la",
+   "start": 17.08,
+   "end": 17.1
+  },
+  {
+   "word": "productivité,",
+   "start": 17.1,
+   "end": 18.08
+  },
+  {
+   "word": "etc.",
+   "start": 18.08,
+   "end": 18.56
+  },
+  {
+   "word": "Donc",
+   "start": 20.22,
+   "end": 20.48
+  },
+  {
+   "word": "voilà,",
+   "start": 20.48,
+   "end": 22.32
+  },
+  {
+   "word": "à",
+   "start": 22.32,
+   "end": 22.56
+  },
+  {
+   "word": "bientôt",
+   "start": 22.56,
+   "end": 22.58
+  },
+  {
+   "word": "dans",
+   "start": 22.58,
+   "end": 23.5
+  },
+  {
+   "word": "la",
+   "start": 23.5,
+   "end": 23.66
+  },
+  {
+   "word": "première",
+   "start": 23.66,
+   "end": 24.38
+  },
+  {
+   "word": "vidéo.",
+   "start": 24.38,
+   "end": 24.6
+  },
+  {
+   "word": "oui",
+   "start": 26.38,
+   "end": 32.28
+  }
+ ]
+}

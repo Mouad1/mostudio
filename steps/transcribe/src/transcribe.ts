@@ -19,7 +19,8 @@ import type { FetchLike, PickedProvider, StepContract, StepModule, Word } from "
 import contract from "../contract.json" with { type: "json" };
 import { planChunks, WINDOW_MIN_TAIL_SEC, WINDOW_SEC, WINDOW_SLACK_SEC } from "./chunk.ts";
 import { transcribeCloudflare } from "./cloudflare.ts";
-import { choosePass, darijaPrompt, msaScore } from "./darija.ts";
+import { darijaPrompt, isFrenchOrEnglish, readsAsFrenchOnly, readsAsMsa } from "./darija.ts";
+import { driftedSegments, replaceDrift } from "./drift.ts";
 import { dropCollapsedRuns, dropPromptEcho } from "./echo.ts";
 import { dropHallucinations } from "./hallucinations.ts";
 import { buildSegments, transcribeWhisperCpp } from "./whisper-cpp.ts";
@@ -142,32 +143,51 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
         collapsedDropped += runs.dropped;
         return { result: { ...result, words: runs.words, segments: runs.segments }, provider };
       };
-      // Darija: pass A = forced Arabic + Darija prompt; pass B (auto language) runs only when A reads as MSA,
-      // since B is chosen only then (French/English speech that forcing `ar` translated into MSA).
+      // Darija: pass A = forced Arabic + Darija prompt. Only when a segment of A reads as MSA: pass B (auto language)
+      // replaces those segments if it heard French/English (speech that forcing `ar` translated into MSA). Segments
+      // still MSA after that, and segments of A that Whisper translated whole into French, take a retry of pass A
+      // (its output varies run to run). The Darija around them stays; pass B's own French is never retried.
       let autoWindows = 0;
+      let autoSegments = 0;
+      let retrySegments = 0;
       const transcribeChunk = async (i: number) => {
         if (!dialect) return stt(i, { language, prompt: userPrompt }, `chunk ${i + 1}`);
         const label = `window ${i + 1}`;
-        const a = await stt(i, { language: "ar", prompt: darijaPrompt(userPrompt) }, `${label} pass A`);
-        const aText = a.result.words.map((w) => w.w).join(" ");
-        const score = msaScore(aText);
-        if (score <= 0) {
-          ctx.log(`${label}: pass A (forced ar, msaScore ${score})`);
+        const callA: Call = { language: "ar", prompt: darijaPrompt(userPrompt) };
+        const a = await stt(i, callA, `${label} pass A`);
+        let cur = a.result;
+        const frenchFromA = (): number[] => cur.segments.flatMap((s, k) => (a.result.segments.includes(s) && readsAsFrenchOnly(s.text) ? [k] : []));
+        const drifted = driftedSegments(cur.segments);
+        const french = frenchFromA();
+        if (drifted.length === 0 && french.length === 0) {
+          ctx.log(`${label}: pass A (forced ar, no segment reads as MSA or as a French translation)`);
           return a;
         }
+        ctx.log(`${label}: ${drifted.length} MSA and ${french.length} French-translated segment(s) of ${cur.segments.length} in pass A`);
         try {
-          const b = await stt(i, {}, `${label} pass B`);
-          if (choosePass(aText, b.result.language) === "B") {
-            autoWindows++;
-            ctx.log(`${label}: pass B (auto heard ${b.result.language}, A msaScore ${score})`);
-            return b;
+          if (drifted.length > 0) {
+            const b = await stt(i, {}, `${label} pass B`);
+            const merged = isFrenchOrEnglish(b.result.language) ? replaceDrift(cur, b.result, drifted) : undefined;
+            if (merged && merged.replaced > 0) {
+              autoWindows++;
+              autoSegments += merged.replaced;
+              cur = { ...cur, words: merged.words, segments: merged.segments };
+              ctx.log(`${label}: pass B for ${merged.replaced} segment(s) (auto heard ${b.result.language})`);
+            } else ctx.log(`${label}: pass B not used (auto heard ${b.result.language})`);
           }
-          ctx.log(`${label}: pass A (auto heard ${b.result.language}, A msaScore ${score})`);
+          const again = [...new Set([...driftedSegments(cur.segments), ...frenchFromA()])].sort((x, y) => x - y);
+          if (again.length > 0) {
+            const notDarija = (t: string): boolean => readsAsMsa(t) || readsAsFrenchOnly(t);
+            const retry = replaceDrift(cur, (await stt(i, callA, `${label} pass A retry`)).result, again, notDarija);
+            retrySegments += retry.replaced;
+            cur = { ...cur, words: retry.words, segments: retry.segments };
+            ctx.log(`${label}: pass A retry for ${retry.replaced} segment(s), ${again.length - retry.replaced} left as they were`);
+          }
         } catch (err) {
           if (!(err instanceof NoProviderError)) throw err;
-          ctx.log(`${label}: pass A (pass B failed: ${err.message})`);
+          ctx.log(`${label}: keeping what it has (${err.message})`);
         }
-        return a;
+        return { result: cur, provider: a.provider };
       };
       for (let i = 0; i < chunks.length; i++) {
         const offset = (chunks[i] as { start: number }).start;
@@ -230,6 +250,8 @@ export function createTranscribe(deps: TranscribeDeps = {}): StepModule {
       if (dialect) {
         metrics.windows = chunks.length;
         metrics.autoWindows = autoWindows;
+        metrics.autoSegments = autoSegments;
+        metrics.retrySegments = retrySegments;
       }
       if (confs.length === 0) metrics.confidenceKnown = false;
       return {
