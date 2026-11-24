@@ -1,0 +1,451 @@
+{
+ "language": "Arabic",
+ "duration": 31.445000192,
+ "text": " السلام أصدقاء، أخيراً درت الفيديو الأول، story الأولى. السلام أصدقاء، أخيراً درت الفيديو الأول، story الأول. L'objectif de la chaîne est de partager avec vous les meilleures pratiques de l'AI. L'objectif de la chaîne est de partager avec vous les meilleures pratiques de l'AI. كنعرف بزاف ديال الناس اللي كيخدموا الـ AI و اللي بلزو ما ما كيقدروش يمزوروا la valo غادي تديرهم par rapport لشنو كي يتعيهم الـ AI وهاتش اللي غادي نحرر أن نبارتشي معاكم حدا من الحاجات اللي هادين",
+ "segments": [
+  {
+   "start": 0,
+   "end": 5.46,
+   "text": " السلام أصدقاء، أخيراً درت الفيديو الأول، story الأولى. السلام أصدقاء، أخيراً درت الفيديو الأول، story الأول.",
+   "avg_logprob": -0.08935802,
+   "no_speech_prob": 0.0022735596,
+   "compression_ratio": 2.1818182
+  },
+  {
+   "start": 5.46,
+   "end": 14.719999,
+   "text": " L'objectif de la chaîne est de partager avec vous les meilleures pratiques de l'AI. L'objectif de la chaîne est de partager avec vous les meilleures pratiques de l'AI.",
+   "avg_logprob": -0.08935802,
+   "no_speech_prob": 0.0022735596,
+   "compression_ratio": 2.1818182
+  },
+  {
+   "start": 14.719999,
+   "end": 27.439999,
+   "text": " كنعرف بزاف ديال الناس اللي كيخدموا الـ AI و اللي بلزو ما ما كيقدروش يمزوروا la valo غادي تديرهم par rapport لشنو كي يتعيهم الـ AI",
+   "avg_logprob": -0.3815826,
+   "no_speech_prob": 0.00021779537,
+   "compression_ratio": 1.6666666
+  },
+  {
+   "start": 27.439999,
+   "end": 31.439999,
+   "text": " وهاتش اللي غادي نحرر أن نبارتشي معاكم حدا من الحاجات اللي هادين",
+   "avg_logprob": -0.3815826,
+   "no_speech_prob": 0.00021779537,
+   "compression_ratio": 1.6666666
+  }
+ ],
+ "words": [
+  {
+   "word": "السلام",
+   "start": 0,
+   "end": 0.54
+  },
+  {
+   "word": "أصدقاء،",
+   "start": 0.54,
+   "end": 1.38
+  },
+  {
+   "word": "أخيراً",
+   "start": 1.38,
+   "end": 2.02
+  },
+  {
+   "word": "درت",
+   "start": 2.02,
+   "end": 2.2
+  },
+  {
+   "word": "الفيديو",
+   "start": 2.2,
+   "end": 2.8
+  },
+  {
+   "word": "الأول،",
+   "start": 2.8,
+   "end": 4.44
+  },
+  {
+   "word": "story",
+   "start": 4.44,
+   "end": 4.82
+  },
+  {
+   "word": "الأولى.",
+   "start": 4.82,
+   "end": 5.38
+  },
+  {
+   "word": "السلام",
+   "start": 5.38,
+   "end": 5.4
+  },
+  {
+   "word": "أصدقاء،",
+   "start": 5.4,
+   "end": 5.42
+  },
+  {
+   "word": "أخيراً",
+   "start": 5.42,
+   "end": 5.44
+  },
+  {
+   "word": "درت",
+   "start": 5.44,
+   "end": 5.46
+  },
+  {
+   "word": "الفيديو",
+   "start": 5.46,
+   "end": 5.48
+  },
+  {
+   "word": "الأول،",
+   "start": 5.48,
+   "end": 5.5
+  },
+  {
+   "word": "story",
+   "start": 5.5,
+   "end": 5.52
+  },
+  {
+   "word": "الأول.",
+   "start": 5.52,
+   "end": 5.54
+  },
+  {
+   "word": "L'objectif",
+   "start": 6.7,
+   "end": 7.46
+  },
+  {
+   "word": "de",
+   "start": 7.46,
+   "end": 7.76
+  },
+  {
+   "word": "la",
+   "start": 7.76,
+   "end": 7.92
+  },
+  {
+   "word": "chaîne",
+   "start": 7.92,
+   "end": 8.46
+  },
+  {
+   "word": "est",
+   "start": 8.46,
+   "end": 9.04
+  },
+  {
+   "word": "de",
+   "start": 9.04,
+   "end": 9.26
+  },
+  {
+   "word": "partager",
+   "start": 9.26,
+   "end": 9.74
+  },
+  {
+   "word": "avec",
+   "start": 9.74,
+   "end": 10.82
+  },
+  {
+   "word": "vous",
+   "start": 10.82,
+   "end": 11.12
+  },
+  {
+   "word": "les",
+   "start": 11.12,
+   "end": 11.6
+  },
+  {
+   "word": "meilleures",
+   "start": 11.6,
+   "end": 12.02
+  },
+  {
+   "word": "pratiques",
+   "start": 12.02,
+   "end": 12.64
+  },
+  {
+   "word": "de",
+   "start": 12.64,
+   "end": 12.96
+  },
+  {
+   "word": "l'AI.",
+   "start": 12.96,
+   "end": 12.98
+  },
+  {
+   "word": "L'objectif",
+   "start": 12.98,
+   "end": 13
+  },
+  {
+   "word": "de",
+   "start": 13,
+   "end": 13.02
+  },
+  {
+   "word": "la",
+   "start": 13.02,
+   "end": 13.04
+  },
+  {
+   "word": "chaîne",
+   "start": 13.04,
+   "end": 13.06
+  },
+  {
+   "word": "est",
+   "start": 13.06,
+   "end": 13.08
+  },
+  {
+   "word": "de",
+   "start": 13.08,
+   "end": 13.1
+  },
+  {
+   "word": "partager",
+   "start": 13.1,
+   "end": 13.12
+  },
+  {
+   "word": "avec",
+   "start": 13.12,
+   "end": 13.14
+  },
+  {
+   "word": "vous",
+   "start": 13.14,
+   "end": 13.16
+  },
+  {
+   "word": "les",
+   "start": 13.16,
+   "end": 13.18
+  },
+  {
+   "word": "meilleures",
+   "start": 13.18,
+   "end": 13.2
+  },
+  {
+   "word": "pratiques",
+   "start": 13.2,
+   "end": 13.22
+  },
+  {
+   "word": "de",
+   "start": 13.22,
+   "end": 13.58
+  },
+  {
+   "word": "l'AI.",
+   "start": 13.58,
+   "end": 14.46
+  },
+  {
+   "word": "كنعرف",
+   "start": 14.72,
+   "end": 15.58
+  },
+  {
+   "word": "بزاف",
+   "start": 15.58,
+   "end": 15.88
+  },
+  {
+   "word": "ديال",
+   "start": 15.88,
+   "end": 16.1
+  },
+  {
+   "word": "الناس",
+   "start": 16.1,
+   "end": 16.38
+  },
+  {
+   "word": "اللي",
+   "start": 16.38,
+   "end": 16.5
+  },
+  {
+   "word": "كيخدموا",
+   "start": 16.5,
+   "end": 16.96
+  },
+  {
+   "word": "الـ",
+   "start": 16.96,
+   "end": 17.22
+  },
+  {
+   "word": "AI",
+   "start": 17.22,
+   "end": 17.36
+  },
+  {
+   "word": "و",
+   "start": 17.36,
+   "end": 17.84
+  },
+  {
+   "word": "اللي",
+   "start": 17.84,
+   "end": 18.36
+  },
+  {
+   "word": "بلزو",
+   "start": 18.36,
+   "end": 19.68
+  },
+  {
+   "word": "ما",
+   "start": 19.68,
+   "end": 19.82
+  },
+  {
+   "word": "ما",
+   "start": 19.82,
+   "end": 20.02
+  },
+  {
+   "word": "كيقدروش",
+   "start": 20.02,
+   "end": 20.76
+  },
+  {
+   "word": "يمزوروا",
+   "start": 20.76,
+   "end": 22.86
+  },
+  {
+   "word": "la",
+   "start": 22.86,
+   "end": 23.74
+  },
+  {
+   "word": "valo",
+   "start": 23.74,
+   "end": 23.88
+  },
+  {
+   "word": "غادي",
+   "start": 23.88,
+   "end": 24.1
+  },
+  {
+   "word": "تديرهم",
+   "start": 24.1,
+   "end": 24.6
+  },
+  {
+   "word": "par",
+   "start": 24.6,
+   "end": 24.92
+  },
+  {
+   "word": "rapport",
+   "start": 24.92,
+   "end": 25.24
+  },
+  {
+   "word": "لشنو",
+   "start": 25.24,
+   "end": 25.68
+  },
+  {
+   "word": "كي",
+   "start": 25.68,
+   "end": 26
+  },
+  {
+   "word": "يتعيهم",
+   "start": 26,
+   "end": 26.46
+  },
+  {
+   "word": "الـ",
+   "start": 26.46,
+   "end": 26.94
+  },
+  {
+   "word": "AI",
+   "start": 26.94,
+   "end": 27.24
+  },
+  {
+   "word": "وهاتش",
+   "start": 27.78,
+   "end": 28.1
+  },
+  {
+   "word": "اللي",
+   "start": 28.1,
+   "end": 28.2
+  },
+  {
+   "word": "غادي",
+   "start": 28.2,
+   "end": 28.4
+  },
+  {
+   "word": "نحرر",
+   "start": 28.4,
+   "end": 28.74
+  },
+  {
+   "word": "أن",
+   "start": 28.74,
+   "end": 28.9
+  },
+  {
+   "word": "نبارتشي",
+   "start": 28.9,
+   "end": 29.58
+  },
+  {
+   "word": "معاكم",
+   "start": 29.58,
+   "end": 29.92
+  },
+  {
+   "word": "حدا",
+   "start": 29.92,
+   "end": 30.32
+  },
+  {
+   "word": "من",
+   "start": 30.32,
+   "end": 30.44
+  },
+  {
+   "word": "الحاجات",
+   "start": 30.44,
+   "end": 30.84
+  },
+  {
+   "word": "اللي",
+   "start": 30.84,
+   "end": 30.96
+  },
+  {
+   "word": "هادين",
+   "start": 30.96,
+   "end": 31.2
+  }
+ ]
+}
