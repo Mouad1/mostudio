@@ -1,0 +1,102 @@
+{
+ "language": "Arabic",
+ "duration": 5.186937344,
+ "text": " واش واضح؟ بزاف ديال الناس كيسولوني على montage و sous-titres و workflow، ماشي مشكل، غادي نوريكم كلشي.",
+ "segments": [
+  {
+   "start": 0,
+   "end": 5.18,
+   "text": " واش واضح؟ بزاف ديال الناس كيسولوني على montage و sous-titres و workflow، ماشي مشكل، غادي نوريكم كلشي.",
+   "avg_logprob": -0.1894029,
+   "no_speech_prob": 0.22961426,
+   "compression_ratio": 1.1764706
+  }
+ ],
+ "words": [
+  {
+   "word": "واش",
+   "start": 0,
+   "end": 0.28
+  },
+  {
+   "word": "واضح؟",
+   "start": 0.28,
+   "end": 0.6
+  },
+  {
+   "word": "بزاف",
+   "start": 0.6,
+   "end": 1.4
+  },
+  {
+   "word": "ديال",
+   "start": 1.4,
+   "end": 1.92
+  },
+  {
+   "word": "الناس",
+   "start": 1.92,
+   "end": 2.02
+  },
+  {
+   "word": "كيسولوني",
+   "start": 2.02,
+   "end": 2.9
+  },
+  {
+   "word": "على",
+   "start": 2.9,
+   "end": 3.46
+  },
+  {
+   "word": "montage",
+   "start": 3.46,
+   "end": 4.06
+  },
+  {
+   "word": "و",
+   "start": 4.06,
+   "end": 4.54
+  },
+  {
+   "word": "sous-titres",
+   "start": 4.54,
+   "end": 4.56
+  },
+  {
+   "word": "و",
+   "start": 4.56,
+   "end": 4.58
+  },
+  {
+   "word": "workflow،",
+   "start": 4.58,
+   "end": 4.6
+  },
+  {
+   "word": "ماشي",
+   "start": 4.6,
+   "end": 4.78
+  },
+  {
+   "word": "مشكل،",
+   "start": 4.78,
+   "end": 5.22
+  },
+  {
+   "word": "غادي",
+   "start": 5.22,
+   "end": 5.66
+  },
+  {
+   "word": "نوريكم",
+   "start": 5.66,
+   "end": 5.68
+  },
+  {
+   "word": "كلشي.",
+   "start": 5.68,
+   "end": 5.7
+  }
+ ]
+}

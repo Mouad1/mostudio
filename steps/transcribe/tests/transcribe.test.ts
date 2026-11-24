@@ -379,6 +379,15 @@ test("planChunks with 30 s windows cuts at the quietest point within +-5 s, 600 
   assert.deepEqual(planChunks(70, env, 10), [{ start: 0, end: 70 }]);
 });
 
+test("planChunks with a minimum tail folds a short last window into the one before it", () => {
+  const env = new Float32Array(8_000).fill(-30); // 80 s at 10 ms
+  // 68 s: a cut near 60 s would leave a ~5-8 s tail window (Whisper reads the prompt back over it)
+  assert.equal(planChunks(68, env, 10, 30, 5, 10).length, 2);
+  assert.equal(planChunks(68, env, 10, 30, 5, 10).at(-1)?.end, 68);
+  assert.equal(planChunks(80, env, 10, 30, 5, 10).length, 3);
+  assert.equal(planChunks(68, env, 10, 30, 5).length, 3);
+});
+
 test("normalizeArabic folds alef/hamza variants and strips harakat", () => {
   assert.equal(normalizeArabic("أيضاً إلى آخر"), "ايضا الي اخر");
 });
@@ -455,7 +464,7 @@ const reply = (language: string, words: [string, number, number][]) =>
   );
 
 test("darija: forced-ar pass by default, auto pass only for French speech that A turned into MSA", async () => {
-  await seed("d.wav", "sine=frequency=440:duration=70", 70);
+  await seed("d.wav", "sine=frequency=440:duration=80", 80);
   const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
   const calls: { file: string; language: unknown; prompt: unknown }[] = [];
   const logs: string[] = [];
@@ -492,6 +501,64 @@ test("darija: forced-ar pass by default, auto pass only for French speech that A
   assert.ok(j.words[3].start > 25, String(j.words[3].start));
   assert.ok(logs.some((l) => /window 2: pass B/.test(l)), logs.join("\n"));
   assert.ok(logs.some((l) => /window 1: pass A/.test(l)), logs.join("\n"));
+});
+
+test("darija on a real 68 s clip: no prompt echo, no repeated or translated lines, two windows", async () => {
+  await seed("intro.wav", "sine=frequency=440:duration=68", 68);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const files: string[] = [];
+  const fx = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+  const step = createTranscribe({
+    fetchImpl: async (_u, init) => {
+      const file = ((init?.body as FormData).get("file") as File).name;
+      files.push(file);
+      // window 1: Groq's real reply; window 2: the reply Groq gave for the near-silent tail (the prompt read back)
+      return new Response(fx(/chunk-000/.test(file) ? "groq-darija-w0.json" : "groq-darija-w2-echo.json"), { status: 200 });
+    },
+  });
+  const r = await runStep(dir, step, { params: { dialect: "darija" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.windows, 2);
+  assert.equal(files.length, 2);
+  assert.equal(r.metrics.promptEchoDropped, 17);
+  assert.equal(r.metrics.collapsedDropped, 50);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  const text = j.words.map((w: { w: string }) => w.w).join(" ");
+  assert.doesNotMatch(text, /واش واضح|كيسولوني|نوريكم|L'objectif|Je connais/);
+  assert.equal(text.split("السلام").length - 1, 1);
+  assert.doesNotMatch(j.segments.map((s: { text: string }) => s.text).join(" "), /واش واضح|L'objectif|Je connais/);
+});
+
+test("without dialect, a segment that reads back the user's prompt is dropped", async () => {
+  await seed("p.wav", "sine=frequency=440:duration=10", 10);
+  const { registry } = fakeRegistry([entry("groq", "openai-compat")]);
+  const step = createTranscribe({
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          language: "english",
+          words: [
+            { word: "hello", start: 0, end: 0.5 },
+            { word: "mostudio,", start: 6, end: 6.5 },
+            { word: "HyperFrames,", start: 6.5, end: 7 },
+            { word: "Groq,", start: 7, end: 7.5 },
+            { word: "ffmpeg.", start: 7.5, end: 8 },
+          ],
+          segments: [
+            { start: 0, end: 0.5, text: " hello", avg_logprob: -0.1 },
+            { start: 6, end: 8, text: " mostudio, HyperFrames, Groq, ffmpeg.", avg_logprob: -0.1 },
+          ],
+        }),
+        { status: 200 },
+      ),
+  });
+  const r = await runStep(dir, step, { params: { prompt: "mostudio, HyperFrames, Groq, ffmpeg" }, ...ctxBase(registry) });
+  assert.equal(r.status, "pass", JSON.stringify(r));
+  assert.equal(r.metrics.promptEchoDropped, 4);
+  assert.equal(r.metrics.collapsedDropped, 0);
+  const j = JSON.parse(readFileSync(join(dir, "transcript", "words.json"), "utf8"));
+  assert.deepEqual(j.words.map((w: { w: string }) => w.w), ["hello"]);
+  assert.equal(j.segments.length, 1);
 });
 
 test("darija: a failing auto pass keeps pass A", async () => {
